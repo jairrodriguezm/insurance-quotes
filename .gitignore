@@ -1,0 +1,38 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Secretos y variables de entorno (NUNCA subir a git)
+.env
+.env.local
+.env.*.local
+
+# Bytecode y cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Carpetas heredadas / legacy que no se usan en el microservicio
+comparativo-cotizaciones-seguros/
+probar_job.py
+
+# Archivos temporales del sistema
+.DS_Store
+Thumbs.db
+
+# Documentos temporales generados en pruebas locales
+*.tmp
+temp/
+output/
