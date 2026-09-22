@@ -221,11 +221,24 @@ def _nombre_corto(ase: dict) -> str:
         "estado": "Seguros del Estado",
         "berkley": "Berkley",
         "davivienda": "Seguros Davivienda",
+        "allianz": "Allianz",
+        "mapfre": "Mapfre",
+        "liberty": "Liberty Seguros",
+        "equidad": "La Equidad",
+        "solidaria": "Aseguradora Solidaria",
+        "previsora": "La Previsora",
+        "positiva": "Positiva",
+        "panamerican": "Pan-American",
+        "confianza": "Seguros Confianza",
+        "nacional": "Nacional de Seguros",
+        "mundial": "Mundial de Seguros",
+        "sbseguros": "SBS Seguros",
     }
     for k, v in mapeo.items():
         if k == id_ase or k in id_ase or k in nombre.lower():
             return v
-    return nombre.split(" S.A")[0].strip() or id_ase.upper()
+    limpio = nombre.replace(" S.A.", "").replace(" S.A", "").replace(" S. A.", "").strip()
+    return limpio or id_ase.upper() or "ASEGURADORA"
 
 
 def _logo_en_celda(
@@ -239,18 +252,23 @@ def _logo_en_celda(
     celda.text = ""
     p = celda.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    imagen_cargada = False
     if ruta and os.path.exists(ruta):
         try:
             p.add_run().add_picture(ruta, width=Inches(ancho_in))
+            imagen_cargada = True
         except Exception:
-            if texto_alternativo:
-                r = p.add_run(texto_alternativo)
-                r.bold = True
-                r.font.size = Pt(10)
-                r.font.name = FUENTE
-                r.font.color.rgb = AZUL
-    elif texto_alternativo:
-        r = p.add_run(texto_alternativo)
+            logger.warning(f"No se pudo cargar la imagen {ruta}, usando texto alternativo.")
+            imagen_cargada = False
+
+    if not imagen_cargada:
+        # Texto sustituto elegante: aseguramos que NUNCA quede vacío
+        fallback_text = texto_alternativo
+        if not fallback_text:
+            base = os.path.basename(ruta).replace(".png", "").replace(".jpg", "").replace("_", " ").strip()
+            fallback_text = base.upper() if base else "ASEGURADORA"
+
+        r = p.add_run(fallback_text)
         r.bold = True
         r.font.size = Pt(10)
         r.font.name = FUENTE
@@ -626,6 +644,7 @@ def _anexos(doc: Document, datos: dict, assets: str, indice_inicial: int) -> Non
                 fila.cells[0],
                 os.path.join(assets, "logos", ase.get("logo", "")),
                 1.6,
+                texto_alternativo=_nombre_corto(ase),
             )
             _texto(
                 fila.cells[1],
@@ -666,7 +685,10 @@ def _asegura_membrete(doc: Document, assets: str) -> None:
     p = encabezado.paragraphs[0] if encabezado.paragraphs else encabezado.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if os.path.exists(logo):
-        p.add_run().add_picture(logo, width=Inches(2.2))
+        try:
+            p.add_run().add_picture(logo, width=Inches(2.2))
+        except Exception:
+            pass
 
 
 # --------------------------------------------------------------------------- #
