@@ -240,7 +240,15 @@ def _logo_en_celda(
     p = celda.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if ruta and os.path.exists(ruta):
-        p.add_run().add_picture(ruta, width=Inches(ancho_in))
+        try:
+            p.add_run().add_picture(ruta, width=Inches(ancho_in))
+        except Exception:
+            if texto_alternativo:
+                r = p.add_run(texto_alternativo)
+                r.bold = True
+                r.font.size = Pt(10)
+                r.font.name = FUENTE
+                r.font.color.rgb = AZUL
     elif texto_alternativo:
         r = p.add_run(texto_alternativo)
         r.bold = True
@@ -378,7 +386,10 @@ def _seccion_cotizaciones(doc: Document, datos: dict, assets: str, idx: int) -> 
                     ruta = os.path.join(assets, "logos", co.get("logo") or "")
                     ancho_logo = 1.3 if len(cos) <= 1 else 1.0
                     if os.path.exists(ruta):
-                        p.add_run().add_picture(ruta, width=Inches(ancho_logo))
+                        try:
+                            p.add_run().add_picture(ruta, width=Inches(ancho_logo))
+                        except Exception:
+                            p.add_run(co.get("nombre", ase.get("nombre", ""))).bold = True
                     else:
                         p.add_run(co.get("nombre", ase.get("nombre", ""))).bold = True
                     if co.get("participacion"):
