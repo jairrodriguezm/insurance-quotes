@@ -13,6 +13,10 @@ class JobRequest(BaseModel):
     process_id: str = Field(description="ID del proceso en Flokzu BPMS o frontend")
     callback_url: str = Field(description="URL del webhook para notificar cuando termine")
     tomador: str = Field(default="", description="Nombre del tomador. Vacío si se llenará después.")
+    categoria: str = Field(
+        default="Todo_Riesgo_Construccion",
+        description="Categoría o ramo de seguro: Autos, Copropiedades, Hogar, Todo_Riesgo_Construccion, Pyme, Maquinaria_Equipo",
+    )
     file_urls: Optional[list[str]] = Field(
         default=None,
         description="Lista de URLs de las cotizaciones a procesar (alternativa a subir archivos)",
@@ -69,6 +73,7 @@ class MetaInfo(BaseModel):
 
     fecha: str = Field(default_factory=lambda: date.today().strftime("%d/%m/%Y"))
     tipo_cobertura: str = "TODO RIESGO CONSTRUCCIÓN Y MONTAJE"
+    categoria: str = ""
     tomador: str = ""
     asegurado: str = ""
     beneficiario: str = ""

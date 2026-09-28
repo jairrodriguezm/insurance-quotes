@@ -148,6 +148,7 @@ async def run_comparative_job(
     file_urls: list[str] | None = None,
     callback_url: str = "",
     tomador: str = "",
+    categoria: str = "Todo_Riesgo_Construccion",
 ) -> None:
     """Execute the full comparative generation pipeline.
 
@@ -160,9 +161,10 @@ async def run_comparative_job(
         file_urls: List of URLs to download quotes from.
         callback_url: Webhook URL for result notification.
         tomador: TOMADOR field value (empty = to fill later).
+        categoria: Insurance category (e.g. 'Autos', 'Copropiedades', 'Hogar', 'Todo_Riesgo_Construccion').
     """
     _update_job(job_id, status=JobStatus.PROCESSING)
-    logger.info("=== Iniciando job %s (process_id=%s) ===", job_id, process_id)
+    logger.info("=== Iniciando job %s (process_id=%s, categoria=%s) ===", job_id, process_id, categoria)
 
     try:
         # ---- Step 1: Gather all documents ----
@@ -196,8 +198,8 @@ async def run_comparative_job(
             logger.info("Texto extraído de %s: %d caracteres", filename, len(text))
 
         # ---- Step 3: MAP — Extract each quote in parallel with Gemini ----
-        logger.info("Extrayendo %d cotizaciones con Gemini (paralelo)...", len(texts))
-        extraction_tasks = [extract_quote(text) for text in texts]
+        logger.info("Extrayendo %d cotizaciones con Gemini (categoría: %s, paralelo)...", len(texts), categoria)
+        extraction_tasks = [extract_quote(text, categoria=categoria) for text in texts]
         quotes = await asyncio.gather(*extraction_tasks)
         logger.info(
             "Cotizaciones extraídas: %s",
@@ -206,7 +208,7 @@ async def run_comparative_job(
 
         # ---- Step 4: Extract project metadata ----
         logger.info("Extrayendo metadata del proyecto...")
-        project_meta = await extract_project_meta(texts)
+        project_meta = await extract_project_meta(texts, categoria=categoria)
 
         # ---- Step 5: Generate recommendation and worst markers in parallel ----
         logger.info("Generando recomendación y marcadores...")
@@ -216,6 +218,7 @@ async def run_comparative_job(
             quotes=list(quotes),
             project_meta=project_meta,
             tomador=tomador,
+            categoria=categoria,
         )
         preliminary_dict = json.loads(preliminary.model_dump_json())
 
@@ -230,17 +233,18 @@ async def run_comparative_job(
             tomador=tomador,
             recommendation=recommendation,
             worst_markers=worst_markers,
+            categoria=categoria,
         )
         data_dict = json.loads(consolidated.model_dump_json())
         logger.info("Consolidación completada: %d aseguradoras", len(consolidated.aseguradoras))
 
         # ---- Step 7: Render Word document ----
-        output_filename = f"COMPARATIVO_FASE_2_{process_id}_{job_id[:8]}.docx"
+        output_filename = f"COMPARATIVO_{categoria.upper()}_{process_id}_{job_id[:8]}.docx"
         output_path = str(Path(tempfile.gettempdir()) / output_filename)
 
         assets_dir = str(settings.ASSETS_DIR)
-        logger.info("Renderizando Word en: %s (assets: %s)", output_path, assets_dir)
-        render_comparative(data_dict, output_path, assets_dir)
+        logger.info("Renderizando Word en: %s (categoría: %s, assets: %s)", output_path, categoria, assets_dir)
+        render_comparative(data_dict, output_path, assets_dir, categoria=categoria)
 
         # ---- Step 8: Upload to Supabase Storage ----
         logger.info("Subiendo a Supabase Storage...")

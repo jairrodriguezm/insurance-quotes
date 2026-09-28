@@ -46,6 +46,10 @@ async def create_comparative_job(
         "",
         description="TOMADOR field value. Leave empty to fill later.",
     ),
+    categoria: str = Form(
+        "Todo_Riesgo_Construccion",
+        description="Categoría o ramo del seguro: Autos, Copropiedades, Hogar, Todo_Riesgo_Construccion, Pyme, Maquinaria_Equipo",
+    ),
     files: Optional[list[UploadFile]] = File(
         None,
         description="Quote files to process (PDF or DOCX)",
@@ -123,6 +127,7 @@ async def create_comparative_job(
         file_urls=parsed_urls if parsed_urls else None,
         callback_url=callback_url,
         tomador=tomador,
+        categoria=categoria,
     )
 
     return JobResponse(job_id=job.job_id)
