@@ -72,12 +72,14 @@ def _build_company_data(quote: ExtractedQuote) -> InsuranceCompanyData:
 def _build_meta(
     project_meta: ProjectMeta | None,
     tomador: str = "",
+    categoria: str = "",
 ) -> MetaInfo:
     """Build the MetaInfo from extracted project metadata and overrides.
 
     Args:
         project_meta: AI-extracted project metadata (may be None).
         tomador: Override for the TOMADOR field (empty = to be filled later).
+        categoria: Selected insurance category.
 
     Returns:
         MetaInfo for the consolidated document.
@@ -85,12 +87,14 @@ def _build_meta(
     if project_meta is None:
         return MetaInfo(
             fecha=date.today().strftime("%d/%m/%Y"),
+            categoria=categoria,
             tomador=tomador,
         )
 
     return MetaInfo(
         fecha=date.today().strftime("%d/%m/%Y"),
         tipo_cobertura=project_meta.tipo_cobertura,
+        categoria=categoria or project_meta.tipo_cobertura,
         tomador=tomador,
         asegurado=project_meta.asegurado,
         beneficiario=project_meta.beneficiario,
@@ -138,6 +142,7 @@ def consolidate_quotes(
     tomador: str = "",
     recommendation: Recommendation | None = None,
     worst_markers: dict[str, list[str]] | None = None,
+    categoria: str = "",
 ) -> ConsolidatedData:
     """Consolidate multiple extracted quotes into a single data structure.
 
@@ -149,17 +154,18 @@ def consolidate_quotes(
         tomador: TOMADOR field value (empty = to be filled later).
         recommendation: AI-generated recommendation (optional).
         worst_markers: AI-generated worst-offering markers (optional).
+        categoria: Selected insurance category.
 
     Returns:
         ConsolidatedData ready for the Word renderer.
     """
-    logger.info("Consolidando %d cotizaciones", len(quotes))
+    logger.info("Consolidando %d cotizaciones (categoría: %s)", len(quotes), categoria)
 
     # Build company data entries
     aseguradoras = [_build_company_data(q) for q in quotes]
 
     # Build metadata
-    meta = _build_meta(project_meta, tomador)
+    meta = _build_meta(project_meta, tomador=tomador, categoria=categoria)
 
     # Build observations
     observations = _build_observations(quotes)
