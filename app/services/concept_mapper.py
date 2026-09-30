@@ -35,6 +35,71 @@ def normalize_str(text: Any) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+BUILTIN_SYNONYMS: dict[str, dict[str, list[str]]] = {
+    "Autos": {
+        "RCE (Daños a bienes de Terceros, Lesiones o muerte a una persona, Lesiones o muerte a dos o más personas)": [
+            "rce", "rce_danos", "rce_basico", "danos a terceros", "lesiones", "muerte", "responsabilidad civil extracontractual", "responsabilidad civil", "ded_rce"
+        ],
+        "Perdida parcial y total Daños": [
+            "perdida_parcial_total_danos", "danos materiales", "perdida parcial por danos", "perdida total danos", "danos al vehiculo", "ded_perdida_total_danos", "ded_perdida_parcial_danos", "perdida total danos", "perdida parcial danos"
+        ],
+        "Pérdida parcial y total por Hurto": [
+            "perdida_parcial_total_hurto", "hurto", "perdida parcial por hurto", "perdida total por hurto", "hurto calificado", "ded_perdida_total_hurto", "ded_perdida_parcial_hurto", "perdida total hurto", "perdida parcial hurto"
+        ],
+        "Protección Patrimonial": [
+            "proteccion_patrimonial", "amparo patrimonial", "cobertura patrimonial"
+        ],
+        "Terremoto, temblor": [
+            "terremoto_temblor", "eventos de la naturaleza", "terremoto", "temblor", "erupcion", "inundacion", "ded_terremoto"
+        ],
+        "Asistencia Jurídica": [
+            "asistencia_juridica", "defensa legal", "asistencia penal", "asistencia legal"
+        ],
+        "Accidentes Personales": [
+            "accidentes_personales", "accidentes ocupantes", "muerte accidental"
+        ],
+        "Gastos de Transporte Por Pérdidas Totales": [
+            "gastos_transporte", "transporte por perdida total", "movilizacion"
+        ],
+        "Conductor Elegido": [
+            "conductor_elegido", "servicio de conductor", "conductor profesional"
+        ],
+        "Vehiculo de Reemplazo": [
+            "vehiculo_reemplazo", "carro de reemplazo", "vehiculo sustituto"
+        ],
+        "Otros amparos": [
+            "otros_amparos", "asistencias", "grua", "asistencia en viaje", "llaves"
+        ],
+    },
+    "Copropiedades": {
+        "Incendio y/o rayo, Explosión, Daños por agua, Anegación": [
+            "incendio_rayo_explosion_agua", "danos_materiales", "incendio", "modulo basico de incendio", "explosion", "danos por agua", "ded_incendio", "ded_explosion_agua"
+        ],
+        "Terremoto, temblor y/o erupción volcánica, HMACC, AMIT": [
+            "terremoto_hmacc_amit", "terremoto", "hmacc", "amit", "sabotaje", "terrorismo", "ded_terremoto"
+        ],
+        "Rotura de vidrios": ["rotura_vidrios", "vidrios", "rotura accidental de vidrios"],
+        "Pago cuotas de Administración": ["cuotas_administracion", "perdida de cuotas", "pago cuotas"],
+        "Remoción de escombros": ["remocion_escombros", "escombros"],
+        "Rotura de maquinaria (daño interno)": ["rotura_maquinaria", "dano interno", "maquinaria", "rotura de maquinaria", "ded_rotura_maquinaria"],
+        "Sustracción con violencia": ["sustraccion_violencia", "hurto", "hurto calificado"],
+        "Básico": ["rce_basico", "rce", "responsabilidad civil extracontractual", "rce predios labores y operaciones", "ded_rce"],
+        "RCE Básico": ["rce_basico", "rce", "responsabilidad civil", "ded_rce"],
+        "D&O": ["dno_directores", "directores", "administradores", "d&o", "dno"],
+        "Manejo": ["manejo_fraude", "manejo", "fraude", "infidelidad", "ded_manejo"],
+    },
+    "Hogar": {
+        "Incendio y riesgos aliados": ["incendio_edificio", "incendio_equipos", "incendio_muebles", "incendio_obras_arte", "incendio", "danos_materiales", "ded_incendio"],
+        "Actos Mal Intencionados de Terceros": ["amit_edificio", "amit_equipos", "amit_muebles", "amit_obras_arte", "amit", "actos mal intencionados", "ded_amit"],
+        "Terremoto, Temblor o Erupción": ["terremoto_edificio", "terremoto_equipos", "terremoto_muebles", "terremoto_obras_arte", "terremoto", "ded_terremoto"],
+        "Hurto Calificado / Hurto Simple": ["hurto_equipos", "hurto_muebles", "hurto_obras_arte", "hurto", "sustraccion", "hurto calificado", "hurto simple", "ded_hurto"],
+        "Equipos Móviles, Portátiles y Joyas": ["equipos_moviles_joyas", "equipos moviles", "joyas", "portatiles"],
+        "Asistencias Domiciliarias": ["asistencias_domiciliarias", "asistencias", "plomeria", "electricidad", "cerrajeria"],
+        "RCE Familiar": ["rce_familiar", "rce", "responsabilidad civil familiar", "cabeza de familia"],
+    },
+}
+
+
 class ConceptEntry:
     """Represents a row in concept_matrix.xlsx."""
 
@@ -257,6 +322,17 @@ class ConceptMapper:
 
         if best_score >= threshold and best_match:
             return best_match
+
+        # 5. Fallback against built-in domain dictionary for active categories
+        norm_cat = self.normalize_category(category)
+        cat_builtins = BUILTIN_SYNONYMS.get(norm_cat, {})
+        for sfc_canon, aliases in cat_builtins.items():
+            if n_term == normalize_str(sfc_canon):
+                return sfc_canon
+            for al in aliases:
+                norm_al = normalize_str(al)
+                if n_term == norm_al or n_term in norm_al or norm_al in n_term:
+                    return sfc_canon
 
         return None
 

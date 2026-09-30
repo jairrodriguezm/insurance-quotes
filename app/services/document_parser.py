@@ -48,20 +48,17 @@ def parse_pdf(file_bytes: bytes) -> str:
                             cells = [str(cell or "").strip() for cell in row]
                             text_parts.append(" | ".join(cells))
         
-        result = "\n\n".join(text_parts)
-        if not result.strip():
-            raise DocumentParsingError(
-                message="El PDF no contiene texto extraíble",
-                detail="El archivo puede ser un escaneo sin OCR."
+        result = "\n\n".join(text_parts).strip()
+        if not result:
+            logger.warning(
+                "El PDF no contiene texto digital extraíble directamente. "
+                "Se procesará visualmente con la capacidad multimodal de Gemini."
             )
+            return "[PDF con imágenes o escaneado - procesamiento multimodal]"
         return result
-    except DocumentParsingError:
-        raise
     except Exception as e:
-        raise DocumentParsingError(
-            message=f"Error al parsear PDF: {e}",
-            detail=str(e)
-        ) from e
+        logger.warning("Fallo al extraer texto con pdfplumber: %s. Se intentará procesamiento multimodal.", e)
+        return "[PDF con formato no estándar - procesamiento multimodal]"
 
 
 def parse_docx(file_bytes: bytes) -> str:

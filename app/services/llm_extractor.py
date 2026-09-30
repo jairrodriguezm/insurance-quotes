@@ -345,18 +345,22 @@ def _reset_client() -> None:
 # ---------------------------------------------------------------------------
 
 async def extract_quote(
-    document_text: str,
+    document_text: str = "",
+    file_bytes: bytes | None = None,
+    filename: str = "",
     categoria: str = "Todo_Riesgo_Construccion",
     prompt_file: str | Path | None = None,
 ) -> ExtractedQuote:
-    """Extract structured quote data from a document's text using Gemini.
+    """Extract structured quote data from a document using Gemini.
 
     This is the MAP step of the Map-Reduce pattern. Uses structured output schema
     and temperature 0.0 to ensure deterministic, hallucination-free extraction.
-    Uses category-specific prompt to reduce token consumption and focus extraction.
+    Supports both multimodal PDF bytes (for scans and vector layouts) and plain text.
 
     Args:
-        document_text: Plain text extracted from a quote document.
+        document_text: Plain text extracted from a quote document (if any).
+        file_bytes: Raw binary bytes of the file for multimodal processing.
+        filename: Name of the file being processed.
         categoria: Insurance category (e.g. 'Autos', 'Copropiedades', 'Hogar', 'Todo_Riesgo_Construccion').
         prompt_file: Optional explicit path to custom prompt file.
 
@@ -372,11 +376,25 @@ async def extract_quote(
             categoria=categoria, prompt_file=prompt_file
         )
 
+        contents_list: list[Any] = []
+        is_pdf = (filename.lower().endswith(".pdf")) or (file_bytes is not None and file_bytes[:4] == b"%PDF")
+        if file_bytes and is_pdf:
+            try:
+                pdf_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
+                contents_list.append(pdf_part)
+            except Exception as e:
+                logger.warning("No se pudo adjuntar PDF binario como Part: %s", e)
+
+        prompt_text = f"## COTIZACIÓN DE SEGUROS ({categoria.upper()}) A ANALIZAR:\n\n"
+        if document_text and document_text.strip() and not document_text.startswith("[PDF"):
+            prompt_text += document_text[:35000]
+        else:
+            prompt_text += "Analiza el documento adjunto y extrae fielmente todos los datos de cotización solicitados."
+        contents_list.append(prompt_text)
+
         response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,
-            contents=[
-                f"## DOCUMENTO DE COTIZACIÓN A ANALIZAR:\n\n{document_text}",
-            ],
+            contents=contents_list,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 temperature=0.0,
@@ -415,16 +433,18 @@ async def extract_quote(
 async def extract_project_meta(
     document_texts: list[str],
     categoria: str = "Todo_Riesgo_Construccion",
+    quotes: list[ExtractedQuote] | None = None,
     prompt_file: str | Path | None = None,
 ) -> ProjectMeta:
     """Extract project and risk metadata across all quote documents.
 
     Consolidates general risk information (Insured, Policyholder, Location,
-    Policy Type, Insured Value, Vigencias) from multiple proposals.
+    Policy Type, Insured Value, Vigencias) from multiple proposals and category-specific fields.
 
     Args:
         document_texts: List of plain text from all quote documents.
         categoria: Insurance category (e.g. 'Autos', 'Copropiedades', 'Hogar', 'Todo_Riesgo_Construccion').
+        quotes: Optional list of ExtractedQuote objects previously extracted.
         prompt_file: Optional explicit path to custom prompt file.
 
     Returns:
@@ -441,19 +461,37 @@ async def extract_project_meta(
         meta_instruction = (
             f"{META_EXTRACTION_PROMPT}\n\n"
             f"REGLAS Y CAMPOS ESPECÍFICOS PARA LA CATEGORÍA '{categoria}':\n"
-            f"{cat_prompt[:2000]}"
+            f"{cat_prompt[:3000]}"
         )
 
-        combined = "\n\n---\n\n".join(
-            f"COTIZACIÓN PROPUESTA {i + 1}:\n{text[:4000]}"
-            for i, text in enumerate(document_texts)
-        )
+        content_sections: list[str] = []
+        if quotes:
+            q_info = []
+            for q in quotes:
+                cobs_sample = {k: v for k, v in list(q.coberturas.items())[:8]}
+                q_info.append(
+                    f"Aseguradora: {q.nombre_compania} (ID: {q.id_compania})\n"
+                    f"Validez: {q.validez_oferta}\n"
+                    f"Coberturas clave: {cobs_sample}\n"
+                )
+                if q.subjetividades:
+                    q_info.append(f"Subjetividades/Garantías: {q.subjetividades[:3]}\n")
+            content_sections.append("COTIZACIONES PREVIAMENTE EXTRAÍDAS:\n" + "\n".join(q_info))
+
+        valid_texts = [t[:4000] for t in document_texts if t.strip() and not t.startswith("[PDF")]
+        if valid_texts:
+            combined = "\n\n---\n\n".join(
+                f"TEXTO DOCUMENTO {i + 1}:\n{text}"
+                for i, text in enumerate(valid_texts)
+            )
+            content_sections.append(combined)
+
+        if not content_sections:
+            content_sections.append(f"Extrae la metadata del riesgo para la categoría {categoria}.")
 
         response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,
-            contents=[
-                combined,
-            ],
+            contents=["\n\n".join(content_sections)],
             config=types.GenerateContentConfig(
                 system_instruction=meta_instruction,
                 temperature=0.0,

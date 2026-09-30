@@ -84,18 +84,20 @@ def _build_meta(
     Returns:
         MetaInfo for the consolidated document.
     """
+    effective_tomador = tomador.strip() or (project_meta.tomador if project_meta else "")
+
     if project_meta is None:
         return MetaInfo(
             fecha=date.today().strftime("%d/%m/%Y"),
             categoria=categoria,
-            tomador=tomador,
+            tomador=effective_tomador,
         )
 
     return MetaInfo(
         fecha=date.today().strftime("%d/%m/%Y"),
         tipo_cobertura=project_meta.tipo_cobertura,
         categoria=categoria or project_meta.tipo_cobertura,
-        tomador=tomador,
+        tomador=effective_tomador,
         asegurado=project_meta.asegurado,
         beneficiario=project_meta.beneficiario,
         vigencia_construccion=project_meta.vigencia_construccion,
@@ -103,6 +105,34 @@ def _build_meta(
         ubicacion=project_meta.ubicacion,
         descripcion_proyecto=project_meta.descripcion_proyecto,
         valor_asegurado=project_meta.valor_asegurado,
+        # Autos
+        identificacion=project_meta.identificacion or project_meta.cedula,
+        marca=project_meta.marca,
+        placa=project_meta.placa,
+        linea=project_meta.linea,
+        modelo=project_meta.modelo,
+        servicio=project_meta.servicio,
+        zona_circulacion=project_meta.zona_circulacion,
+        accesorios=project_meta.accesorios,
+        # Hogar
+        cedula=project_meta.cedula or project_meta.identificacion,
+        direccion=project_meta.direccion or project_meta.ubicacion,
+        ciudad=project_meta.ciudad,
+        ano_construccion=project_meta.ano_construccion,
+        valor_edificio=project_meta.valor_edificio,
+        valor_muebles=project_meta.valor_muebles,
+        valor_equipos=project_meta.valor_equipos,
+        valor_arte=project_meta.valor_arte,
+        valor_dinero=project_meta.valor_dinero,
+        asegurado_actualmente=project_meta.asegurado_actualmente,
+        siniestros_previos=project_meta.siniestros_previos,
+        # Copropiedades
+        valor_cimentacion=project_meta.valor_cimentacion,
+        valor_maquinaria=project_meta.valor_maquinaria,
+        valor_equipos_moviles=project_meta.valor_equipos_moviles,
+        valor_rce=project_meta.valor_rce,
+        valor_dno=project_meta.valor_dno,
+        valor_manejo=project_meta.valor_manejo,
     )
 
 

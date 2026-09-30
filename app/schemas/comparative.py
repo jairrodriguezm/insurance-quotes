@@ -77,11 +77,44 @@ class MetaInfo(BaseModel):
     tomador: str = ""
     asegurado: str = ""
     beneficiario: str = ""
+    ubicacion: str = ""
+    valor_asegurado: Optional[Union[int, float]] = None
+
+    # TRC
     vigencia_construccion: Optional[dict[str, str]] = None
     vigencia_mantenimiento: Optional[dict[str, str]] = None
-    ubicacion: str = ""
     descripcion_proyecto: str = ""
-    valor_asegurado: Optional[Union[int, float]] = None
+
+    # Autos
+    identificacion: str = ""
+    marca: str = ""
+    placa: str = ""
+    linea: str = ""
+    modelo: str = ""
+    servicio: str = "Particular"
+    zona_circulacion: str = ""
+    accesorios: str = "NO ESPECIFICA"
+
+    # Hogar
+    cedula: str = ""
+    direccion: str = ""
+    ciudad: str = ""
+    ano_construccion: str = "NO ESPECIFICA"
+    valor_edificio: Optional[Union[int, float]] = None
+    valor_muebles: Optional[Union[int, float]] = None
+    valor_equipos: Optional[Union[int, float]] = None
+    valor_arte: Optional[Union[int, float]] = None
+    valor_dinero: Optional[Union[int, float]] = None
+    asegurado_actualmente: str = "NO ESPECIFICA"
+    siniestros_previos: str = "NO ESPECIFICA"
+
+    # Copropiedades
+    valor_cimentacion: Optional[Union[int, float]] = None
+    valor_maquinaria: Optional[Union[int, float]] = None
+    valor_equipos_moviles: Optional[Union[int, float]] = None
+    valor_rce: Optional[Union[int, float]] = None
+    valor_dno: Optional[Union[int, float]] = None
+    valor_manejo: Optional[Union[int, float]] = None
 
 
 class InsuranceCompanyData(BaseModel):

@@ -87,20 +87,31 @@ class ExtractedQuote(BaseModel):
 
 
 class ProjectMeta(BaseModel):
-    """Metadata about the insured project, inferred from the quotes."""
+    """Metadata about the insured project or risk, inferred from quotes."""
 
     tipo_cobertura: str = Field(
         default="TODO RIESGO CONSTRUCCIÓN Y MONTAJE",
-        description="Tipo de póliza, ej: 'TODO RIESGO CONSTRUCCIÓN Y MONTAJE', 'TODO RIESGO DAÑO MATERIAL'",
+        description="Tipo de póliza, ej: 'TODO RIESGO CONSTRUCCIÓN Y MONTAJE', 'MULTIRRIESGO COPROPIEDADES', 'SEGURO DE AUTOMÓVILES', 'SEGURO DE HOGAR'",
+    )
+    tomador: str = Field(
+        default="",
+        description="Nombre o razón social del tomador y No. de Identificación/Cédula/NIT si está disponible",
     )
     asegurado: str = Field(
         default="",
-        description="Nombre del asegurado / propietario del proyecto",
+        description="Nombre del asegurado / propietario del proyecto o predio",
     )
     beneficiario: str = Field(
         default="",
         description="Beneficiario de la póliza",
     )
+    ubicacion: str = Field(default="", description="Ubicación del riesgo, municipio o dirección")
+    valor_asegurado: Optional[Union[int, float]] = Field(
+        default=None,
+        description="Valor total asegurado en pesos colombianos, sin separadores",
+    )
+
+    # TRC / Ingeniería
     vigencia_construccion: Optional[dict[str, str]] = Field(
         default=None,
         description="{'desde': 'dd/mm/aaaa', 'hasta': 'dd/mm/aaaa'}",
@@ -109,9 +120,35 @@ class ProjectMeta(BaseModel):
         default=None,
         description="{'desde': '...', 'hasta': '...', 'tipo': 'Amplio', 'duracion': '12 meses'}",
     )
-    ubicacion: str = Field(default="", description="Ubicación del proyecto")
-    descripcion_proyecto: str = Field(default="", description="Descripción del proyecto a asegurar")
-    valor_asegurado: Optional[Union[int, float]] = Field(
-        default=None,
-        description="Valor total asegurado en pesos colombianos, sin separadores",
-    )
+    descripcion_proyecto: str = Field(default="", description="Descripción del proyecto u obra a asegurar")
+
+    # Autos
+    identificacion: str = Field(default="", description="No. Identificación / Cédula / NIT del tomador")
+    marca: str = Field(default="", description="Marca del vehículo (ej: MAZDA, TOYOTA, CHEVROLET)")
+    placa: str = Field(default="", description="Placa del vehículo (ej: KHY654)")
+    linea: str = Field(default="", description="Línea o referencia del vehículo (ej: CX-30, COROLLA)")
+    modelo: str = Field(default="", description="Modelo / Año del vehículo (ej: 2024, 2025)")
+    servicio: str = Field(default="Particular", description="Servicio del vehículo (Particular / Público / Especial)")
+    zona_circulacion: str = Field(default="", description="Zona o ciudad de circulación")
+    accesorios: str = Field(default="NO ESPECIFICA", description="Valor o amparo de accesorios")
+
+    # Hogar
+    cedula: str = Field(default="", description="Cédula del tomador")
+    direccion: str = Field(default="", description="Dirección exacta del inmueble")
+    ciudad: str = Field(default="", description="Ciudad del inmueble")
+    ano_construccion: str = Field(default="NO ESPECIFICA", description="Año o antigüedad de construcción")
+    valor_edificio: Optional[Union[int, float]] = Field(default=None, description="Valor asegurado Edificio")
+    valor_muebles: Optional[Union[int, float]] = Field(default=None, description="Valor asegurado Muebles y Enseres")
+    valor_equipos: Optional[Union[int, float]] = Field(default=None, description="Valor asegurado Equipos Electrónicos")
+    valor_arte: Optional[Union[int, float]] = Field(default=None, description="Valor asegurado Obras de Arte")
+    valor_dinero: Optional[Union[int, float]] = Field(default=None, description="Valor asegurado Dinero")
+    asegurado_actualmente: str = Field(default="NO ESPECIFICA", description="¿Asegurado actualmente?")
+    siniestros_previos: str = Field(default="NO ESPECIFICA", description="¿Siniestros previos?")
+
+    # Copropiedades
+    valor_cimentacion: Optional[Union[int, float]] = Field(default=None, description="Valor cimentación")
+    valor_maquinaria: Optional[Union[int, float]] = Field(default=None, description="Valor maquinaria y equipo")
+    valor_equipos_moviles: Optional[Union[int, float]] = Field(default=None, description="Valor equipos móviles y portátiles")
+    valor_rce: Optional[Union[int, float]] = Field(default=None, description="Límite RCE")
+    valor_dno: Optional[Union[int, float]] = Field(default=None, description="Límite D&O")
+    valor_manejo: Optional[Union[int, float]] = Field(default=None, description="Límite Manejo")

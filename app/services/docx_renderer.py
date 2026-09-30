@@ -225,18 +225,34 @@ def _buscar_valor_concepto(
     categoria: str,
     subitem: str = "",
 ) -> Any:
-    """Add a formatted paragraph to the document."""
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER if centrado else WD_ALIGN_PARAGRAPH.JUSTIFY
-    p.paragraph_format.space_after = Pt(4)
-    if vineta:
-        p.paragraph_format.left_indent = Inches(0.3)
-        contenido = "•  " + contenido
-    run = p.add_run(contenido)
-    run.font.size = Pt(tam)
-    run.font.name = FUENTE
-    run.bold = negrita
-    return p
+    """Look up a concept value from an insurer's dictionary using ConceptMapper."""
+    if not conceptos_dict:
+        return RELLENO
+
+    # Exact key match
+    if etiqueta in conceptos_dict:
+        val = conceptos_dict[etiqueta]
+        return val if val not in (None, "") else RELLENO
+
+    norm_etiqueta = normalize_str(etiqueta)
+    for k, v in conceptos_dict.items():
+        if normalize_str(k) == norm_etiqueta:
+            return v if v not in (None, "") else RELLENO
+
+    mapper = get_concept_mapper()
+    sfc_target = mapper.map_concept(etiqueta, categoria)
+
+    for k, v in conceptos_dict.items():
+        if subitem and normalize_str(subitem) not in normalize_str(k):
+            continue
+        sfc_k = mapper.map_concept(k, categoria)
+        if sfc_k and sfc_target and sfc_k == sfc_target:
+            return v if v not in (None, "") else RELLENO
+        norm_k = normalize_str(k)
+        if norm_k in norm_etiqueta or norm_etiqueta in norm_k:
+            return v if v not in (None, "") else RELLENO
+
+    return RELLENO
 
 
 def _fila_banda(tabla: Any, texto_banda: str, n_cols: int, principal: bool = True) -> Any:
@@ -599,15 +615,34 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
     if len(doc.tables) > 1:
         t1 = doc.tables[1]
         for row in t1.rows[1:]:
-            etq = row.cells[0].text.strip()
-            val = _buscar_valor_concepto(
-                aseguradoras[0].get("coberturas", {}) if aseguradoras else {},
-                etq,
-                "Copropiedades",
-            )
-            if val == RELLENO and meta.get("valor_asegurado") and "EDIFICIO" in etq:
-                val = meta.get("valor_asegurado")
-            _texto(row.cells[1], _fmt_cop(val) if isinstance(val, (int, float)) else str(val), tam=9, centrado=False)
+            etq = row.cells[0].text.strip().upper()
+            val = RELLENO
+            if "EDIFICIO" in etq:
+                val = meta.get("valor_edificio") or meta.get("valor_asegurado")
+            elif "CIMENTACI" in etq:
+                val = meta.get("valor_cimentacion")
+            elif "MAQUINARIA" in etq:
+                val = meta.get("valor_maquinaria")
+            elif "MUEBLE" in etq:
+                val = meta.get("valor_muebles")
+            elif "ELECTRIC" in etq or "ELECTRONIC" in etq:
+                val = meta.get("valor_equipos")
+            elif "PORTATIL" in etq or "MOVIL" in etq:
+                val = meta.get("valor_equipos_moviles")
+            elif "RCE" in etq:
+                val = meta.get("valor_rce")
+            elif "D&O" in etq or "DIRECTOR" in etq:
+                val = meta.get("valor_dno")
+            elif "MANEJO" in etq:
+                val = meta.get("valor_manejo")
+
+            if val in (None, "", RELLENO) and aseguradoras:
+                val = _buscar_valor_concepto(
+                    aseguradoras[0].get("coberturas", {}),
+                    row.cells[0].text.strip(),
+                    "Copropiedades",
+                )
+            _texto(row.cells[1], _fmt_cop(val) if isinstance(val, (int, float)) else str(val or RELLENO), tam=9, centrado=False)
 
     # 3. Table 2: Quotes Table (COMPAÑÍA, PRIMA, MODALIDAD)
     if len(doc.tables) > 2 and n_ase > 0:
@@ -698,7 +733,7 @@ def _render_hogar(doc: Document, data: dict, assets: str) -> None:
         t0.rows[1].cells[1].text = str(meta.get("tomador", ""))
         t0.rows[2].cells[1].text = str(meta.get("cedula", meta.get("identificacion", "")))
         t0.rows[3].cells[1].text = str(meta.get("direccion", meta.get("ubicacion", "")))
-        t0.rows[4].cells[1].text = str(meta.get("ciudad", "Bogotá D.C."))
+        t0.rows[4].cells[1].text = str(meta.get("ciudad") or "NO ESPECIFICA")
         t0.rows[5].cells[1].text = str(meta.get("ano_construccion", "NO ESPECIFICA"))
         t0.rows[6].cells[1].text = _fmt_cop(meta.get("valor_edificio", meta.get("valor_asegurado")))
         t0.rows[7].cells[1].text = _fmt_cop(meta.get("valor_muebles"))
@@ -754,10 +789,13 @@ def _render_hogar(doc: Document, data: dict, assets: str) -> None:
             logo_path = os.path.join(assets, "logos", ase.get("logo", ""))
             _logo_en_celda(t3.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
 
+        current_ramo = ""
         for row in t3.rows[1:]:
-            ramo_label = row.cells[0].text.strip()
+            first_cell = row.cells[0].text.strip()
+            if first_cell:
+                current_ramo = first_cell
             item_label = row.cells[1].text.strip()
-            query = f"{ramo_label} {item_label}".strip()
+            query = f"{current_ramo} {item_label}".strip()
             for i, ase in enumerate(aseguradoras):
                 val = _buscar_valor_concepto(ase.get("coberturas", {}), query, "Hogar", subitem=item_label)
                 if val == RELLENO:

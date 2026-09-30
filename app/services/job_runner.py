@@ -199,7 +199,15 @@ async def run_comparative_job(
 
         # ---- Step 3: MAP — Extract each quote in parallel with Gemini ----
         logger.info("Extrayendo %d cotizaciones con Gemini (categoría: %s, paralelo)...", len(texts), categoria)
-        extraction_tasks = [extract_quote(text, categoria=categoria) for text in texts]
+        extraction_tasks = [
+            extract_quote(
+                document_text=text,
+                file_bytes=doc_bytes,
+                filename=doc_name,
+                categoria=categoria,
+            )
+            for (doc_name, doc_bytes), text in zip(documents, texts)
+        ]
         quotes = await asyncio.gather(*extraction_tasks)
         logger.info(
             "Cotizaciones extraídas: %s",
@@ -208,7 +216,7 @@ async def run_comparative_job(
 
         # ---- Step 4: Extract project metadata ----
         logger.info("Extrayendo metadata del proyecto...")
-        project_meta = await extract_project_meta(texts, categoria=categoria)
+        project_meta = await extract_project_meta(texts, categoria=categoria, quotes=list(quotes))
 
         # ---- Step 5: Generate recommendation and worst markers in parallel ----
         logger.info("Generando recomendación y marcadores...")
