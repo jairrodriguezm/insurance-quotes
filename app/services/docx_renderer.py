@@ -588,123 +588,54 @@ def _clean_autos_producto(ase_id: str, etiqueta: str, modalidad: str) -> str:
 
 
 def _clean_autos_cobertura(key: str, val: Any, ase_id: str = "") -> str:
-    """Format and normalize Autos coverage values matching company standard."""
+    """Format and normalize Autos coverage values with zero hallucination.
+
+    Strictly reflects values extracted from the insurer's document,
+    applying currency formatting when numeric or standard status representation.
+    """
     if val is None or str(val).strip() in ("", "NO ESPECIFICA", "None"):
-        if key == "accidentes_personales" and "bolivar" in ase_id.lower():
-            return "NO AMPARA"
-        if key in ("asistencia_juridica", "gastos_transporte") and "bolivar" in ase_id.lower():
-            return "Según condiciones"
-        if key == "conductor_elegido" and "bolivar" in ase_id.lower():
-            return "INCLUIDO"
         return "NO ESPECIFICA"
+
+    if isinstance(val, (int, float)):
+        return _fmt_cop(val, decimales=False)
 
     s = str(val).strip()
 
-    if key == "rce":
-        if "4000" in s or "4.000" in s or "4,000" in s or s == "4000000000":
-            return "$ 4.000.000.000"
-        if "3040" in s or "3.040" in s or "3,040" in s or s == "3040000000":
-            return "$ 3.040.000.000"
-        if isinstance(val, (int, float)):
-            return _fmt_cop(val, decimales=False)
+    # Check if string contains a clean monetary figure
+    m = re.search(r"\$?\s*([\d\.\,]{6,14})", s)
+    if m:
+        clean_num = m.group(1).replace(".", "").replace(",", "")
+        if clean_num.isdigit() and int(clean_num) > 100000:
+            return _fmt_cop(int(clean_num), decimales=False)
 
-    if key in ("perdida_parcial_total_danos", "perdida_parcial_total_hurto"):
-        if isinstance(val, (int, float)):
-            return _fmt_cop(val, decimales=False)
-        m = re.search(r"\$?\s*([\d\.\,]{6,12})", s)
-        if m:
-            clean_num = m.group(1).replace(".", "").replace(",", "")
-            if clean_num.isdigit() and int(clean_num) > 1000000:
-                return _fmt_cop(int(clean_num), decimales=False)
-        if "bolivar" in ase_id.lower():
-            return "$ 244.760.000"
-        if "axa" in ase_id.lower():
-            return "$ 252.500.000"
-        if "sura" in ase_id.lower():
-            return "$ 249.700.000"
+    norm = s.lower()
+    if norm in ("si ampara", "ampara", "incluida", "incluido", "si", "100% va", "100%"):
+        if key in ("proteccion_patrimonial", "terremoto_temblor"):
+            return "SI AMPARA"
+        if key in ("conductor_elegido", "vehiculo_reemplazo", "asistencia_juridica"):
+            return "INCLUIDO"
 
-    if key == "proteccion_patrimonial":
-        return "SI AMPARA"
-
-    if key == "terremoto_temblor":
-        if "bolivar" in ase_id.lower():
-            return "$ 244.760.000"
-        if "sura" in ase_id.lower():
-            return "INCLUIDA"
-        return "SI AMPARA"
-
-    if key == "asistencia_juridica":
-        if "sura" in ase_id.lower():
-            return "ILIMITADA"
-        if "bolivar" in ase_id.lower():
-            return "Según condiciones"
-        return "SI AMPARA"
-
-    if key == "accidentes_personales":
-        if "sura" in ase_id.lower():
-            return "$50.000.000 (35 por ocupante)"
-        if "axa" in ase_id.lower():
-            return "50 millones *persona"
-        if "bolivar" in ase_id.lower():
-            return "NO AMPARA"
-
-    if key == "gastos_transporte":
-        if "20.000" in s or "1.200" in s or "axa" in ase_id.lower():
-            return "$ 1.200.000"
-        if "80" in s or "sura" in ase_id.lower():
-            return "$80.000 por dia"
-        if "bolivar" in ase_id.lower():
-            return "Según condiciones"
-
-    if key == "conductor_elegido":
-        if "sura" in ase_id.lower():
-            return "12 eventos x vigencia"
-        return "INCLUIDO"
-
-    if key == "vehiculo_reemplazo":
-        if "axa" in ase_id.lower():
-            return "INCLUIDO según condiciones"
-        return "SI AMPARA"
-
-    if key == "otros_amparos":
-        if "bolivar" in ase_id.lower():
-            return "Descuento con proveedores / grua / oficina movil"
-        if "axa" in ase_id.lower():
-            return "Pérdida de llaves / Accesorios $17.157.325"
-        if "sura" in ase_id.lower():
-            return "Grúa, carro taller, accesorios: $50.000.000"
+    if norm in ("no ampara", "no incluye", "excluido", "no"):
+        return "NO AMPARA"
 
     return s
 
 
 def _clean_autos_deducible(key: str, val: Any, ase_id: str = "") -> str:
-    """Format and normalize Autos deductible strings matching company standard."""
-    s = str(val or "").strip()
+    """Format and normalize Autos deductible strings matching company standard with zero hallucination."""
+    if not val or str(val).strip() in ("", "NO ESPECIFICA", "None", "0", "0%", "$ 0"):
+        return "Sin deducible"
+
+    s = str(val).strip()
     norm = s.lower()
 
-    if key == "ded_rce":
+    if norm in ("sin deducible", "no aplica", "0", "0%", "$ 0", "exento"):
         return "Sin deducible"
 
-    if key in ("ded_perdida_total_danos", "ded_perdida_total_hurto"):
-        if "sura" in ase_id.lower() or s in ("$ 0", "0%", "0"):
-            return "Sin deducible"
-        return "10% 1SMMLV"
+    if "arriba" in norm or "mismos" in norm or "igual" in norm:
+        return "Deducibles arriba"
 
-    if key in ("ded_perdida_parcial_danos", "ded_perdida_parcial_hurto"):
-        if "bolivar" in ase_id.lower() or "0.8" in s:
-            return "0% 0.8SMMLV"
-        return "10% 1SMMLV"
-
-    if key == "ded_terremoto":
-        if "bolivar" in ase_id.lower() or "arriba" in norm or "mismos" in norm:
-            return "Deducibles arriba"
-        if "axa" in ase_id.lower() or "sin deducible" in norm:
-            return "Sin deducible"
-        if "sura" in ase_id.lower():
-            return "10% 1SMMLV"
-        return "Sin deducible"
-
-    return s if s else "Sin deducible"
+    return _limpiar_texto_deducible(s, categoria="Autos")
 
 
 AUTOS_COBERTURAS_MAP = [
@@ -1071,21 +1002,6 @@ def _obtener_asistencia_copropiedades(ase: dict, current_section: str, concepto_
 
     if "juridica" in sec:
         return "Sin límite"
-    elif "comunes" in sec:
-        if "jardiner" in lbl:
-            return "2 Eventos / 10 SMDLV"
-        if "celador" in lbl:
-            return "2 Eventos / 30 SMDLV"
-        if "traslado" in lbl:
-            return "30 SMDLV / 2 Eventos"
-        return "30 SMDLV / Máximo 5 eventos"
-    elif "privadas" in sec:
-        if "referencia" in lbl or "telefonico" in lbl:
-            return "Sin límite"
-        if "filtraci" in lbl:
-            return "25 SMDLV / 2 Eventos"
-        return "30 SMDLV / 2 Eventos"
-
     return "Incluido"
 
 
