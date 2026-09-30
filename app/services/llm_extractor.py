@@ -293,9 +293,9 @@ RECOMMENDATION_PROMPT = """Eres el Analista Técnico Senior de Suscripción de M
 
 ## REGLAS
 - Identifica claramente el `aseguradora_id` y la `opcion` recomendada.
-- Genera en `vinetas` argumentos sólidos, objetivos y verificables agrupados por los 5 criterios anteriores.
+- Genera en `vinetas` entre 3 y 4 viñetas ejecutivas, breves y directas (máximo 8 a 12 palabras por viñeta, estilo titular de beneficios comerciales clave, ej: 'Mejor Prima en función de la cobertura otorgada', 'Mejor deducible daños parciales', 'Paquete asistencial completo'). NO redactes párrafos extensos ni uses prefijos de criterio como 'Comparativo Económico:'.
 - Cero alucinaciones: NO inventes coberturas ni valores no presentes en los datos.
-- Incluye alertas sobre requisitos indispensables de previo cumplimiento (pago antes del evento, SARLAFT, paramédicos, etc.).
+- Incluye alertas sobre requisitos indispensables de previo cumplimiento (pago antes del evento, SARLAFT, paramédicos, vigencia 30 días, etc.).
 
 Datos comparativos consolidados:"""
 

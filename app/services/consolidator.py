@@ -194,6 +194,16 @@ def consolidate_quotes(
     # Build company data entries
     aseguradoras = [_build_company_data(q) for q in quotes]
 
+    # Sort insurers: recommended option first, then by ascending premium (best offer first)
+    if recommendation and recommendation.aseguradora_id:
+        rec_id = recommendation.aseguradora_id.lower()
+        aseguradoras.sort(key=lambda a: (
+            0 if (rec_id in a.id.lower() or a.id.lower() in rec_id) else 1,
+            (a.opciones[0].get("prima") or 999999999) if a.opciones else 999999999,
+        ))
+    else:
+        aseguradoras.sort(key=lambda a: (a.opciones[0].get("prima") or 999999999) if a.opciones else 999999999)
+
     # Build metadata
     meta = _build_meta(project_meta, tomador=tomador, categoria=categoria)
 
