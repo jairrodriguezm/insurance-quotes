@@ -164,6 +164,63 @@ def _nombre_corto(ase: dict) -> str:
     return limpio or id_ase.upper() or "ASEGURADORA"
 
 
+def _resolver_ruta_logo(
+    assets: str,
+    logo_name: str | None = None,
+    id_ase: str = "",
+    nombre: str = "",
+) -> str:
+    """Find the best matching logo file in assets/logos, handling common naming variations."""
+    logos_dir = os.path.join(assets, "logos")
+    if not os.path.exists(logos_dir):
+        return ""
+
+    if logo_name:
+        cand = os.path.join(logos_dir, logo_name)
+        if os.path.exists(cand):
+            return cand
+        cand_png = os.path.join(logos_dir, f"{logo_name}.png")
+        if os.path.exists(cand_png):
+            return cand_png
+
+    alias_map = {
+        "seguros_del_estado": "estado.png",
+        "seguros del estado": "estado.png",
+        "estado": "estado.png",
+        "axa_colpatria": "axa_colpatria.png",
+        "axa colpatria": "axa_colpatria.png",
+        "colpatria": "axa_colpatria.png",
+        "hdi": "hdi.png",
+        "zurich": "zurich.png",
+        "sura": "sura.png",
+        "bolivar": "bolivar.png",
+        "seguros_bolivar": "bolivar.png",
+        "davivienda": "davivienda.png",
+        "mundial": "mundial.png",
+        "berkley": "berkley.png",
+        "chubb": "chubb.png",
+    }
+
+    id_clean = (id_ase or "").lower().strip()
+    nom_clean = (nombre or "").lower().strip()
+
+    for k, v in alias_map.items():
+        if k in id_clean or k in nom_clean or (logo_name and k in logo_name.lower()):
+            cand = os.path.join(logos_dir, v)
+            if os.path.exists(cand):
+                return cand
+
+    try:
+        for f in os.listdir(logos_dir):
+            stem = os.path.splitext(f)[0].lower()
+            if stem and (stem in id_clean or stem in nom_clean):
+                return os.path.join(logos_dir, f)
+    except Exception:
+        pass
+
+    return ""
+
+
 def _logo_en_celda(
     celda: Any,
     ruta: str,
@@ -176,6 +233,18 @@ def _logo_en_celda(
     p = celda.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     imagen_cargada = False
+
+    if ruta and not os.path.exists(ruta):
+        dir_name = os.path.dirname(ruta)
+        assets_cand = os.path.dirname(dir_name) if "logos" in dir_name else dir_name
+        ruta_res = _resolver_ruta_logo(
+            assets_cand,
+            os.path.basename(ruta),
+            nombre=texto_alternativo or "",
+        )
+        if ruta_res and os.path.exists(ruta_res):
+            ruta = ruta_res
+
     if ruta and os.path.exists(ruta):
         try:
             p.add_run().add_picture(ruta, width=Inches(ancho_in))
@@ -204,6 +273,7 @@ def _logo_en_celda(
         r.font.size = Pt(8)
         r.font.name = FUENTE
     celda.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
 
 
 def _ajustar_columnas(tabla: Any, n_esperadas: int, col_width: Any = Inches(1.5)) -> None:
@@ -367,30 +437,6 @@ def _seccion_cotizaciones(doc: Document, datos: dict, assets: str, idx: int) -> 
         if primera is not None and len(opciones) > 1:
             ultima = tabla.rows[-1].cells[0]
             primera.merge(ultima)
-
-
-    # Exact key match
-    if etiqueta in conceptos_dict:
-        val = conceptos_dict[etiqueta]
-        return val if val not in (None, "") else RELLENO
-
-    norm_etiqueta = normalize_str(etiqueta)
-    for k, v in conceptos_dict.items():
-        if normalize_str(k) == norm_etiqueta:
-            return v if v not in (None, "") else RELLENO
-
-    mapper = get_concept_mapper()
-    sfc_target = mapper.map_concept(etiqueta, categoria)
-
-    for k, v in conceptos_dict.items():
-        if subitem and normalize_str(subitem) not in normalize_str(k):
-            continue
-        sfc_k = mapper.map_concept(k, categoria)
-        if sfc_k and sfc_target and sfc_k == sfc_target:
-            return v if v not in (None, "") else RELLENO
-        norm_k = normalize_str(k)
-        if norm_k in norm_etiqueta or norm_etiqueta in norm_k:
-            return v if v not in (None, "") else RELLENO
 
 
 def _anexos(doc: Document, datos: dict, assets: str, indice_inicial: int) -> None:
@@ -921,6 +967,208 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                 _texto(row.cells[i + 1], str(val), tam=8)
 
 
+def _limpiar_texto_deducible_hogar(texto: str, ramo: str = "") -> str:
+    """Format and clean deductible descriptions to match professional human underwriting standards."""
+    if not texto or str(texto).strip().upper() in ("NO ESPECIFICA", "NONE", "0", ""):
+        if any(r in ramo.lower() for r in ("incendio", "amit", "actos mal", "aliados")):
+            return "SIN DEDUCIBLE"
+        return "NO ESPECIFICA"
+
+    t = str(texto).strip()
+    if re.search(r"^(sin deducible|no aplica|sin|0%?)$", t, re.IGNORECASE):
+        return "SIN DEDUCIBLE"
+
+    # Convert percentages e.g. 3.00 POR CIENTO -> 3%
+    t = re.sub(r"(\d+)\.00\s*(?:POR CIENTO|%|PORCENTAJE)", r"\1%", t, flags=re.IGNORECASE)
+    t = re.sub(r"(\d+\.\d+)\s*(?:POR CIENTO|%|PORCENTAJE)", r"\1%", t, flags=re.IGNORECASE)
+    t = re.sub(r"(\d+)\s*(?:POR CIENTO|PORCENTAJE)", r"\1%", t, flags=re.IGNORECASE)
+    t = re.sub(r"(\d+)\s*%", r"\1%", t)
+
+    # Normalize SMMLV and SMDLV
+    t = re.sub(r"SALARIOS?\s+M[IÍ]NIMOS?\s+MENSUALES?\s+LEGALES?\s+VIGENTES?\.?", "SMMLV", t, flags=re.IGNORECASE)
+    t = re.sub(r"SALARIOS?\s+M[IÍ]NIMOS?\s+MENSUALES?\.?", "SMMLV", t, flags=re.IGNORECASE)
+    t = re.sub(r"SALARIOS?\s+M[IÍ]NIMOS?\s+DIARIOS?\s+LEGALES?\s+VIGENTES?\.?", "SMDLV", t, flags=re.IGNORECASE)
+    t = re.sub(r"SALARIOS?\s+M[IÍ]NIMOS?\s+DIARIOS?\.?", "SMDLV", t, flags=re.IGNORECASE)
+
+    # Normalize numbers e.g. 0.50 -> 0.5, 1.00 -> 1, 3.00 -> 3
+    t = re.sub(r"\b0\.50\b", "0.5", t)
+    t = re.sub(r"\b(\d+)\.00\b", r"\1", t)
+
+    # Normalize key terms
+    t = re.sub(r"DEL\s+VALOR\s+DE\s+LA\s+P[EÉ]RDIDA", "del valor de la pérdida", t, flags=re.IGNORECASE)
+    t = re.sub(r"EL\s+VALOR\s+ASEGURABLE(?:\s+DE\s+C/ART\s+AFECTADO\s+POR\s+EL\s+SINI)?", "Valor Asegurable", t, flags=re.IGNORECASE)
+    t = re.sub(r"M[IÍ]NIMO\s*", "Min. ", t, flags=re.IGNORECASE)
+    t = re.sub(r"SOBRE\s+EL\s+VALOR\s+ASEGURABLE", "Valor Asegurable", t, flags=re.IGNORECASE)
+    t = re.sub(r"SOBRE\s+EL\s+VALOR\s+DE\s+LA\s+P[EÉ]RDIDA", "del valor de la pérdida", t, flags=re.IGNORECASE)
+
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"\s+\.", ".", t)
+    t = t.rstrip(".")
+
+    t = re.sub(r"(pérdida|asegurable)\s+Min\.", r"\1, Min.", t, flags=re.IGNORECASE)
+    return t
+
+
+def _obtener_cobertura_hogar(ase: dict, ramo: str, subitem: str, meta: dict) -> str:
+    """Retrieve and format a specific coverage for an insurer in Hogar category."""
+    coberturas = ase.get("coberturas", {}) or {}
+    ramo_l = (ramo or "").lower()
+    subitem_l = (subitem or "").lower()
+
+    if "asistencia" in subitem_l:
+        val = coberturas.get("asistencias_domiciliarias") or coberturas.get("asistencia_domiciliaria") or coberturas.get("asistencias")
+        if val and str(val).strip().upper() not in ("NO ESPECIFICA", "NONE", "NO"):
+            return "Incluido"
+        return "Excluido"
+
+    if "obra" in subitem_l or "arte" in subitem_l:
+        val = None
+        if "incendio" in ramo_l:
+            val = coberturas.get("incendio_obras_arte")
+        elif "actos" in ramo_l or "amit" in ramo_l:
+            val = coberturas.get("amit_obras_arte")
+        elif "terremoto" in ramo_l:
+            val = coberturas.get("terremoto_obras_arte")
+        elif "hurto" in ramo_l:
+            val = coberturas.get("hurto_obras_arte")
+        if val is None:
+            val = coberturas.get("obras_arte") or coberturas.get("obras_de_arte")
+        if val and isinstance(val, (int, float)) and val > 0:
+            return _fmt_cop(val, decimales=False)
+        return "Excluido"
+
+    if "movil" in subitem_l or "móvil" in subitem_l or "joya" in subitem_l:
+        val = coberturas.get("equipos_moviles_joyas") or coberturas.get("equipos_moviles") or coberturas.get("joyas")
+        if val and isinstance(val, (int, float)) and val > 0:
+            return _fmt_cop(val, decimales=False)
+        return "Excluido"
+
+    if "rce" in subitem_l or "responsabilidad civil" in subitem_l:
+        val = coberturas.get("rce_familiar") or coberturas.get("responsabilidad_civil") or coberturas.get("rce")
+        if val and isinstance(val, (int, float)) and val > 0:
+            return _fmt_cop(val, decimales=False)
+        return "Excluido"
+
+    if "edificio" in subitem_l:
+        val = None
+        if "incendio" in ramo_l:
+            val = coberturas.get("incendio_edificio")
+        elif "actos" in ramo_l or "amit" in ramo_l:
+            val = coberturas.get("amit_edificio")
+        elif "terremoto" in ramo_l:
+            val = coberturas.get("terremoto_edificio")
+
+        if val is None or val == 0:
+            val = coberturas.get("edificio") or coberturas.get("incendio_edificio") or meta.get("valor_edificio") or meta.get("valor_asegurado")
+        if val and isinstance(val, (int, float)) and val > 0:
+            return _fmt_cop(val, decimales=False)
+        return "Excluido"
+
+    if "equipo" in subitem_l or "electr" in subitem_l:
+        val = None
+        if "incendio" in ramo_l:
+            val = coberturas.get("incendio_equipos")
+        elif "actos" in ramo_l or "amit" in ramo_l:
+            val = coberturas.get("amit_equipos")
+        elif "terremoto" in ramo_l:
+            val = coberturas.get("terremoto_equipos")
+        elif "hurto calificado" in ramo_l:
+            val = coberturas.get("hurto_calificado_equipos") or coberturas.get("hurto_equipos")
+        elif "hurto simple" in ramo_l:
+            val = coberturas.get("hurto_simple_equipos") or coberturas.get("hurto_equipos")
+        elif "hurto" in ramo_l:
+            val = coberturas.get("hurto_equipos")
+
+        if val is None or val == 0:
+            val = coberturas.get("incendio_equipos") or meta.get("valor_equipos")
+        if val and isinstance(val, (int, float)) and val > 0:
+            return _fmt_cop(val, decimales=False)
+        return "Excluido"
+
+    if "mueble" in subitem_l or "encer" in subitem_l or "enser" in subitem_l:
+        val = None
+        if "incendio" in ramo_l:
+            val = coberturas.get("incendio_muebles")
+        elif "actos" in ramo_l or "amit" in ramo_l:
+            val = coberturas.get("amit_muebles")
+        elif "terremoto" in ramo_l:
+            val = coberturas.get("terremoto_muebles")
+        elif "hurto calificado" in ramo_l:
+            val = coberturas.get("hurto_calificado_muebles") or coberturas.get("hurto_muebles")
+        elif "hurto simple" in ramo_l:
+            val = coberturas.get("hurto_simple_muebles") or coberturas.get("hurto_muebles")
+        elif "hurto" in ramo_l:
+            val = coberturas.get("hurto_muebles")
+
+        if val is None or val == 0:
+            val = coberturas.get("incendio_muebles") or meta.get("valor_muebles")
+        if val and isinstance(val, (int, float)) and val > 0:
+            return _fmt_cop(val, decimales=False)
+        return "Excluido"
+
+    return "NO ESPECIFICA"
+
+
+def _obtener_deducible_hogar(ase: dict, concepto_label: str) -> str:
+    """Retrieve and format a specific deductible for an insurer in Hogar category."""
+    deducibles = ase.get("deducibles", {}) or {}
+    lbl = concepto_label.lower()
+
+    if "incendio" in lbl:
+        val = deducibles.get("ded_incendio") or deducibles.get("incendio")
+        return _limpiar_texto_deducible_hogar(val, ramo="incendio")
+
+    if "actos" in lbl or "amit" in lbl:
+        val = deducibles.get("ded_amit") or deducibles.get("amit") or deducibles.get("ded_hmacc")
+        if not val or val == "NO ESPECIFICA":
+            val = deducibles.get("ded_terrorismo") or deducibles.get("terrorismo")
+        return _limpiar_texto_deducible_hogar(val, ramo="amit")
+
+    if "terremoto" in lbl:
+        val = deducibles.get("ded_terremoto") or deducibles.get("terremoto")
+        return _limpiar_texto_deducible_hogar(val, ramo="terremoto")
+
+    if "hurto calificado" in lbl:
+        val = deducibles.get("ded_hurto_calificado") or deducibles.get("ded_hurto") or deducibles.get("hurto")
+        return _limpiar_texto_deducible_hogar(val, ramo="hurto")
+
+    if "hurto simple" in lbl:
+        val = deducibles.get("ded_hurto_simple") or deducibles.get("ded_hurto") or deducibles.get("hurto")
+        return _limpiar_texto_deducible_hogar(val, ramo="hurto")
+
+    if "otras" in lbl or "electr" in lbl:
+        val = (
+            deducibles.get("ded_dano_electrico")
+            or deducibles.get("ded_corto_circuito")
+            or deducibles.get("ded_electrico")
+            or deducibles.get("ded_otras_coberturas")
+        )
+        if val and val != "NO ESPECIFICA":
+            limpio = _limpiar_texto_deducible_hogar(val, ramo="otras")
+            if "daño" not in limpio.lower() and "equipo" not in limpio.lower():
+                return f"Daño a equipos eléctricos: {limpio}"
+            return limpio
+        for k, v in deducibles.items():
+            if any(w in k.lower() for w in ["electr", "circuito", "interno"]):
+                limpio = _limpiar_texto_deducible_hogar(v, ramo="otras")
+                return f"Daño a equipos eléctricos: {limpio}"
+        return "NO ESPECIFICA"
+
+    if "hurto" in lbl and "otras" in lbl:
+        val_hurto = deducibles.get("ded_hurto") or deducibles.get("hurto")
+        val_elec = deducibles.get("ded_corto_circuito") or deducibles.get("ded_dano_electrico")
+        h_txt = _limpiar_texto_deducible_hogar(val_hurto, ramo="hurto")
+        e_txt = _limpiar_texto_deducible_hogar(val_elec, ramo="otras")
+        parts = []
+        if h_txt != "NO ESPECIFICA":
+            parts.append(f"Hurto: {h_txt}")
+        if e_txt != "NO ESPECIFICA":
+            parts.append(f"Daño eléctrico: {e_txt}")
+        return "\n".join(parts) if parts else "NO ESPECIFICA"
+
+    return "NO ESPECIFICA"
+
+
 def _render_hogar(doc: Document, data: dict, assets: str) -> None:
     """Populate the Hogar.docx layout template."""
     meta = data.get("meta", {})
@@ -931,18 +1179,23 @@ def _render_hogar(doc: Document, data: dict, assets: str) -> None:
     # 1. Table 0: General Info (13 rows x 2 cols)
     if len(doc.tables) > 0:
         t0 = doc.tables[0]
-        t0.rows[1].cells[1].text = str(meta.get("tomador", ""))
-        t0.rows[2].cells[1].text = str(meta.get("cedula", meta.get("identificacion", "")))
-        t0.rows[3].cells[1].text = str(meta.get("direccion", meta.get("ubicacion", "")))
-        t0.rows[4].cells[1].text = str(meta.get("ciudad") or "NO ESPECIFICA")
-        t0.rows[5].cells[1].text = str(meta.get("ano_construccion", "NO ESPECIFICA"))
-        t0.rows[6].cells[1].text = _fmt_cop(meta.get("valor_edificio", meta.get("valor_asegurado")))
-        t0.rows[7].cells[1].text = _fmt_cop(meta.get("valor_muebles"))
-        t0.rows[8].cells[1].text = _fmt_cop(meta.get("valor_equipos"))
-        t0.rows[9].cells[1].text = _fmt_cop(meta.get("valor_arte"))
-        t0.rows[10].cells[1].text = _fmt_cop(meta.get("valor_dinero"))
-        t0.rows[11].cells[1].text = str(meta.get("asegurado_actualmente", "NO ESPECIFICA"))
-        t0.rows[12].cells[1].text = str(meta.get("siniestros_previos", "NO ESPECIFICA"))
+        tomador = str(meta.get("tomador", ""))
+        tomador_limpio = re.sub(r"\s*-\s*(?:C\.?C\.?|NIT|C\.?E\.?)\s*[\d\.\s-]+", "", tomador, flags=re.IGNORECASE).strip()
+        _texto(t0.rows[1].cells[1], tomador_limpio or tomador, centrado=False)
+        _texto(t0.rows[2].cells[1], str(meta.get("cedula", meta.get("identificacion", ""))), centrado=False)
+        _texto(t0.rows[3].cells[1], str(meta.get("direccion", meta.get("ubicacion", ""))), centrado=False)
+        _texto(t0.rows[4].cells[1], str(meta.get("ciudad") or "NO ESPECIFICA"), centrado=False)
+        _texto(t0.rows[5].cells[1], str(meta.get("ano_construccion", "NO ESPECIFICA")), centrado=False)
+        _texto(t0.rows[6].cells[1], _fmt_cop(meta.get("valor_edificio", meta.get("valor_asegurado")), decimales=False), centrado=False)
+        _texto(t0.rows[7].cells[1], _fmt_cop(meta.get("valor_muebles"), decimales=False), centrado=False)
+        _texto(t0.rows[8].cells[1], _fmt_cop(meta.get("valor_equipos"), decimales=False), centrado=False)
+        _texto(t0.rows[9].cells[1], _fmt_cop(meta.get("valor_arte"), decimales=False), centrado=False)
+        val_dinero = meta.get("valor_dinero")
+        _texto(t0.rows[10].cells[1], _fmt_cop(val_dinero, decimales=False) if val_dinero and str(val_dinero) not in ("0", "NO ESPECIFICA") else "N/A", centrado=False)
+        aseg_act = meta.get("asegurado_actualmente")
+        _texto(t0.rows[11].cells[1], "N/A" if not aseg_act or aseg_act == "NO ESPECIFICA" else str(aseg_act), centrado=False)
+        sin_prev = meta.get("siniestros_previos")
+        _texto(t0.rows[12].cells[1], "N/A" if not sin_prev or sin_prev == "NO ESPECIFICA" else str(sin_prev), centrado=False)
 
     # 2. Table 1: Quotes Table (COMPAÑÍA, PRECIO INCLUIDO IVA)
     if len(doc.tables) > 1 and n_ase > 0:
@@ -953,17 +1206,40 @@ def _render_hogar(doc: Document, data: dict, assets: str) -> None:
 
         for ase in aseguradoras:
             fila = t1.add_row()
-            logo_path = os.path.join(assets, "logos", ase.get("logo", ""))
+            logo_path = _resolver_ruta_logo(
+                assets,
+                ase.get("logo"),
+                id_ase=ase.get("id") or ase.get("id_compania", ""),
+                nombre=ase.get("nombre") or ase.get("nombre_compania", ""),
+            )
             _logo_en_celda(fila.cells[0], logo_path, ancho_in=1.1, texto_alternativo=_nombre_corto(ase))
             op = ase.get("opciones", [{}])[0] if ase.get("opciones") else {}
-            _texto(fila.cells[1], _fmt_cop(op.get("prima")), tam=9, negrita=True)
+            prima_val = op.get("prima")
+            modalidad = op.get("modalidad", "")
+            match_iva = re.search(r"Total a Pagar con IVA:\s*\$?([\d\.,]+)", modalidad, re.IGNORECASE)
+            if match_iva:
+                try:
+                    num_str = match_iva.group(1).replace(".", "").replace(",", ".")
+                    prima_val = float(num_str)
+                except Exception:
+                    pass
+            _texto(fila.cells[1], _fmt_cop(prima_val, decimales=False), tam=9, negrita=True)
             _no_partir(fila)
 
     # 3. Table 2: Recommendation (1 row x 2 cols)
     if len(doc.tables) > 2 and rec:
         t2 = doc.tables[2]
-        elegida = next((a for a in aseguradoras if a.get("id") == rec.get("aseguradora_id")), None)
-        logo_path = os.path.join(assets, "logos", elegida.get("logo", "") if elegida else "")
+        rec_id = (rec.get("aseguradora_id") or rec.get("id_aseguradora") or rec.get("compania") or "").lower()
+        elegida = next(
+            (a for a in aseguradoras if (a.get("id") or a.get("id_compania") or "").lower() in rec_id or rec_id in (a.get("id") or a.get("id_compania") or "").lower()),
+            aseguradoras[0] if aseguradoras else None,
+        )
+        logo_path = _resolver_ruta_logo(
+            assets,
+            elegida.get("logo") if elegida else "",
+            id_ase=elegida.get("id") or elegida.get("id_compania", "") if elegida else "",
+            nombre=elegida.get("nombre") or elegida.get("nombre_compania", "") if elegida else "",
+        )
         _logo_en_celda(
             t2.rows[0].cells[0],
             logo_path,
@@ -973,21 +1249,30 @@ def _render_hogar(doc: Document, data: dict, assets: str) -> None:
         )
         der = t2.rows[0].cells[1]
         der.text = ""
-        for i, vin in enumerate(rec.get("vinetas", [])):
+        vinetas = rec.get("vinetas") or rec.get("justificacion") or []
+        if isinstance(vinetas, str):
+            vinetas = [v.strip() for v in vinetas.split("\n") if v.strip()]
+        for i, vin in enumerate(vinetas):
             p = der.paragraphs[0] if i == 0 else der.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
             p.paragraph_format.space_after = Pt(3)
-            r = p.add_run("•  " + vin)
+            vin_clean = re.sub(r"^[\d\.\-\•\*\s]+", "", vin).strip()
+            r = p.add_run(f"{i+1}. {vin_clean}")
             r.font.size = Pt(9)
             r.font.name = FUENTE
 
-    # 4. Table 3: Coverages (19 rows x (2 + N) cols)
+    # 4. Table 3: Coverages (Header + 21 rows x (2 + N) cols)
     if len(doc.tables) > 3 and n_ase > 0:
         t3 = doc.tables[3]
         _ajustar_columnas(t3, 2 + n_ase)
         for i, ase in enumerate(aseguradoras):
             col = i + 2
-            logo_path = os.path.join(assets, "logos", ase.get("logo", ""))
+            logo_path = _resolver_ruta_logo(
+                assets,
+                ase.get("logo"),
+                id_ase=ase.get("id") or ase.get("id_compania", ""),
+                nombre=ase.get("nombre") or ase.get("nombre_compania", ""),
+            )
             _logo_en_celda(t3.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
 
         current_ramo = ""
@@ -996,27 +1281,30 @@ def _render_hogar(doc: Document, data: dict, assets: str) -> None:
             if first_cell:
                 current_ramo = first_cell
             item_label = row.cells[1].text.strip()
-            query = f"{current_ramo} {item_label}".strip()
             for i, ase in enumerate(aseguradoras):
-                val = _buscar_valor_concepto(ase.get("coberturas", {}), query, "Hogar", subitem=item_label)
-                if val == RELLENO:
-                    val = _buscar_valor_concepto(ase.get("coberturas", {}), item_label, "Hogar")
-                _texto(row.cells[i + 2], _fmt_cop(val) if isinstance(val, (int, float)) else str(val), tam=8)
+                val_str = _obtener_cobertura_hogar(ase, current_ramo, item_label, meta)
+                _texto(row.cells[i + 2], val_str, tam=8)
 
-    # 5. Table 4: Deductibles (5 rows x (1 + N) cols)
+    # 5. Table 4: Deductibles (Header + 6 rows x (1 + N) cols)
     if len(doc.tables) > 4 and n_ase > 0:
         t4 = doc.tables[4]
         _ajustar_columnas(t4, 1 + n_ase)
         for i, ase in enumerate(aseguradoras):
             col = i + 1
-            logo_path = os.path.join(assets, "logos", ase.get("logo", ""))
+            logo_path = _resolver_ruta_logo(
+                assets,
+                ase.get("logo"),
+                id_ase=ase.get("id") or ase.get("id_compania", ""),
+                nombre=ase.get("nombre") or ase.get("nombre_compania", ""),
+            )
             _logo_en_celda(t4.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
 
         for row in t4.rows[1:]:
             concepto_label = row.cells[0].text.strip()
             for i, ase in enumerate(aseguradoras):
-                val = _buscar_valor_concepto(ase.get("deducibles", {}), concepto_label, "Hogar")
-                _texto(row.cells[i + 1], str(val), tam=8)
+                val_str = _obtener_deducible_hogar(ase, concepto_label)
+                _texto(row.cells[i + 1], val_str, tam=8)
+
 
 
 def _render_todo_riesgo_construccion(doc: Document, data: dict, assets: str) -> None:
