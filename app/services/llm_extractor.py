@@ -294,8 +294,12 @@ RECOMMENDATION_PROMPT = """Eres el Analista Técnico Senior de Suscripción de M
 ## REGLAS
 - Identifica claramente el `aseguradora_id` y la `opcion` recomendada.
 - Genera en `vinetas` entre 3 y 4 viñetas ejecutivas, breves y directas (máximo 8 a 12 palabras por viñeta, estilo titular de beneficios comerciales clave, ej: 'Mejor Prima en función de la cobertura otorgada', 'Mejor deducible daños parciales', 'Paquete asistencial completo'). NO redactes párrafos extensos ni uses prefijos de criterio como 'Comparativo Económico:'.
+- Genera en `observaciones_tecnicas` (para el ANEXO 2: OBSERVACIONES Y PREGUNTAS DEL CLIENTE) entre 3 y 5 viñetas analíticas y rigurosas de suscripción técnica humana:
+  1. Aclaración del riesgo y alcance de la póliza (ej. precisión si se trata de RCE puntual para evento/visita técnica de 1 día y no obra civil, indicando que las filas de Sección 1 TRC no aplican).
+  2. Auditoría de aforos y discrepancias operativas (ej. contrastar aforo cotizado entre aseguradoras como 23 vs 30 personas, y advertir sobre el riesgo de inoperancia por exceso de aforo).
+  3. Garantías indispensables de suscripción y pago (SARLAFT previo a expedición, pago obligatorio antes del evento, ambulancia medicalizada o paramédicos en sitio, etc.).
+  4. Exclusiones críticas y vacíos de cobertura identificados (terrorismo, sustancias psicoactivas, enfermedades transmisibles, RC profesional, pérdidas financieras puras).
 - Cero alucinaciones: NO inventes coberturas ni valores no presentes en los datos.
-- Incluye alertas sobre requisitos indispensables de previo cumplimiento (pago antes del evento, SARLAFT, paramédicos, vigencia 30 días, etc.).
 
 Datos comparativos consolidados:"""
 

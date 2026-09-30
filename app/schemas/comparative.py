@@ -57,6 +57,10 @@ class Recommendation(BaseModel):
     vinetas: list[str] = Field(
         description="Lista de argumentos objetivos que sustentan la recomendación"
     )
+    observaciones_tecnicas: list[str] = Field(
+        default_factory=list,
+        description="Observaciones técnicas de suscripción y preguntas críticas para el cliente (Anexo 2): alertas de aforo, exclusiones relevantes, garantías de pago y condiciones previas a la emisión.",
+    )
 
 
 class AnnexConfig(BaseModel):

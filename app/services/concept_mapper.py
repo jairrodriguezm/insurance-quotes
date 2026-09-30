@@ -91,6 +91,53 @@ BUILTIN_SYNONYMS: dict[str, dict[str, list[str]]] = {
         "D&O": ["dno_directores", "directores", "administradores", "d&o", "dno"],
         "Manejo": ["manejo_fraude", "manejo", "fraude", "infidelidad", "ded_manejo"],
     },
+    "Todo_Riesgo_Construccion": {
+        "Daños materiales (Cobertura A)": ["danos_materiales", "dano_material", "cobertura a"],
+        "Terremoto, temblor y/o erupción volcánica (Cobertura B)": ["terremoto", "temblor", "erupcion", "cobertura b", "ded_terremoto"],
+        "Tormenta e inundación (Cobertura C)": ["tormenta_inundacion", "tormenta", "inundacion", "cobertura c", "ded_tormenta"],
+        "Mantenimiento amplio (Cobertura D)": ["mantenimiento_amplio", "mantenimiento", "cobertura d", "ded_mantenimiento"],
+        "Remoción de escombros (Cobertura G)": ["remocion_escombros", "remocion", "escombros", "cobertura g", "ded_remocion"],
+        "Huelga, asonada, motín, conmoción civil o popular": ["hmacc_amit", "hmacc", "amit", "huelga", "asonada", "ded_hmacc"],
+        "Hurto calificado": ["hurto_calificado", "hurto", "sustraccion", "ded_hurto"],
+        "Cronograma de avance": ["cronograma_avance", "cronograma"],
+        "Gastos adicionales de horas extra, trabajo nocturno, flete": ["gastos_horas_extra", "horas_extra", "trabajo_nocturno"],
+        "Obras en zona sísmica": ["obras_zona_sismica", "zona_sismica"],
+        "Bienes almacenados fuera del sitio": ["bienes_fuera_sitio", "bienes_almacenados"],
+        "Prueba de maquinarias e instalaciones": ["prueba_maquinaria", "pruebas_maquinaria"],
+        "Campamentos y almacenes de materiales de construcción": ["campamentos_almacenes", "campamentos", "ded_campamentos"],
+        "Medidas de seguridad contra inundaciones": ["medidas_inundacion"],
+        "Protección contra incendio": ["proteccion_incendio"],
+        "Transportes nacionales": ["transportes_nacionales", "transportes"],
+        "Siniestros en serie": ["siniestros_serie"],
+        "Obras civiles aseguradas puestas en operación": ["obras_civiles_operacion", "obras_civiles"],
+        "Cimentación por pilotaje y tablestacados para fosas de obras": ["cimentacion_pilotaje", "pilotaje"],
+        "Exclusión de daños y pérdidas por hundimiento y asentamiento del subsuelo": ["hundimiento_subsuelo", "asentamiento", "ded_hundimiento"],
+        "Error de diseño": ["error_diseno", "leg_2", "leg_3", "ded_error_diseno"],
+        "Honorarios profesionales": ["honorarios_profesionales", "honorarios"],
+        "Planos y documentos": ["planos_documentos"],
+        "Gastos de extinción del siniestro": ["gastos_extincion"],
+        "Condiciones especiales relativas a la remoción de escombros": ["condiciones_remocion"],
+        "Actos de autoridad": ["actos_autoridad"],
+        "Gastos para la preservación de bienes en caso de pérdida": ["preservacion_bienes"],
+        "Responsabilidad civil extracontractual": ["rce", "responsabilidad_civil_extracontractual", "rce_basico", "rce_eventos", "responsabilidad_civil", "ded_rce"],
+        "Contratistas y subcontratistas independientes": ["rce_contratistas", "contratistas_subcontratistas", "contratistas"],
+        "Civil Patronal": ["rce_patronal", "civil_patronal", "patronal"],
+        "Civil cruzada": ["rce_cruzada", "civil_cruzada", "cruzada", "ded_rce_cruzada"],
+        "Vehículos propios y no propios": ["rce_vehiculos", "vehiculos_propios", "vehiculos"],
+        "Bienes bajo cuidado, tenencia y control": ["rce_cuidado_control", "bienes_bajo_cuidado", "cuidado_tenencia_control", "ded_propiedades_existentes"],
+        "Contaminación, polución, filtración, accidental, súbita e imprevista": ["rce_contaminacion", "contaminacion_polucion", "contaminacion"],
+        "Vibración, eliminación o debilitación de elementos portantes para actividades de construcción": ["rce_vibracion", "vibracion"],
+        "Amparo opcional de conducciones y/o servicios subterráneos": ["rce_subterraneas", "conducciones_subterraneas", "servicios_subterraneos", "ded_cables"],
+        "Terrorismo": ["terrorismo"],
+        "Incendio, rayo, humo y explosión": ["ded_incendio"],
+        "Tormenta e inundación, huracán, tifón, ciclón": ["ded_tormenta"],
+        "Cables y tuberías subterráneas": ["ded_cables"],
+        "Propiedades adyacentes": ["ded_adyacentes"],
+        "Caída de aeronaves": ["ded_aeronaves"],
+        "Impericia, negligencia y actos individuales malintencionados de operadores y trabajadores del asegurado": ["ded_impericia"],
+        "Corto circuito": ["ded_corto_circuito"],
+        "Propiedades existentes o que quedan bajo cuidado, custodia o supervisión del asegurado": ["ded_propiedades_existentes"],
+    },
     "Hogar": {
         "Incendio y riesgos aliados": ["incendio_edificio", "incendio_equipos", "incendio_muebles", "incendio_obras_arte", "incendio", "danos_materiales", "ded_incendio"],
         "Actos Mal Intencionados de Terceros": ["amit_edificio", "amit_equipos", "amit_muebles", "amit_obras_arte", "amit", "actos mal intencionados", "ded_amit"],
@@ -295,6 +342,16 @@ class ConceptMapper:
                 if syn_norm == n_term:
                     return e.sfc_concept
 
+        # 2b. Exact match in built-in domain dictionary for active category
+        norm_cat = self.normalize_category(category)
+        cat_builtins = BUILTIN_SYNONYMS.get(norm_cat, {})
+        for sfc_canon, aliases in cat_builtins.items():
+            if n_term == normalize_str(sfc_canon):
+                return sfc_canon
+            for al in aliases:
+                if n_term == normalize_str(al):
+                    return sfc_canon
+
         # 3. Substring match (e.g., if one contains the other)
         best_sub: Optional[str] = None
         best_sub_len = 0
@@ -330,15 +387,11 @@ class ConceptMapper:
         if best_score >= threshold and best_match:
             return best_match
 
-        # 5. Fallback against built-in domain dictionary for active categories
-        norm_cat = self.normalize_category(category)
-        cat_builtins = BUILTIN_SYNONYMS.get(norm_cat, {})
+        # 5. Fallback substring match against built-in domain dictionary
         for sfc_canon, aliases in cat_builtins.items():
-            if n_term == normalize_str(sfc_canon):
-                return sfc_canon
             for al in aliases:
                 norm_al = normalize_str(al)
-                if n_term == norm_al or n_term in norm_al or norm_al in n_term:
+                if n_term in norm_al or norm_al in n_term:
                     return sfc_canon
 
         return None

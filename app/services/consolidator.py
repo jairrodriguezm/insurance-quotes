@@ -209,6 +209,8 @@ def consolidate_quotes(
 
     # Build observations
     observations = _build_observations(quotes)
+    if recommendation and getattr(recommendation, "observaciones_tecnicas", None):
+        observations.extend(recommendation.observaciones_tecnicas)
 
     # Build annex config
     anexos = AnnexConfig(
