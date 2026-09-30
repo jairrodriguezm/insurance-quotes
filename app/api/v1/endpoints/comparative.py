@@ -39,8 +39,8 @@ async def create_comparative_job(
         description="Process identifier from Flokzu BPMS or the frontend",
     ),
     callback_url: str = Form(
-        ...,
-        description="Webhook URL to notify when the job completes or fails",
+        "",
+        description="Webhook URL to notify when the job completes or fails (opcional)",
     ),
     tomador: str = Form(
         "",

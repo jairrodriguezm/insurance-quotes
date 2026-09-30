@@ -143,11 +143,24 @@ def _nombre_corto(ase: dict) -> str:
         "estado": "Seguros del Estado",
         "berkley": "Berkley",
         "davivienda": "Seguros Davivienda",
+        "allianz": "Allianz",
+        "mapfre": "Mapfre",
+        "liberty": "Liberty Seguros",
+        "equidad": "La Equidad",
+        "solidaria": "Aseguradora Solidaria",
+        "previsora": "La Previsora",
+        "positiva": "Positiva",
+        "panamerican": "Pan-American",
+        "confianza": "Seguros Confianza",
+        "nacional": "Nacional de Seguros",
+        "mundial": "Mundial de Seguros",
+        "sbseguros": "SBS Seguros",
     }
     for k, v in mapeo.items():
         if k == id_ase or k in id_ase or k in nombre.lower():
             return v
-    return nombre.split(" S.A")[0].strip() or id_ase.upper()
+    limpio = nombre.replace(" S.A.", "").replace(" S.A", "").replace(" S. A.", "").strip()
+    return limpio or id_ase.upper() or "ASEGURADORA"
 
 
 def _logo_en_celda(
@@ -161,10 +174,23 @@ def _logo_en_celda(
     celda.text = ""
     p = celda.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    imagen_cargada = False
     if ruta and os.path.exists(ruta):
-        p.add_run().add_picture(ruta, width=Inches(ancho_in))
-    elif texto_alternativo:
-        r = p.add_run(texto_alternativo)
+        try:
+            p.add_run().add_picture(ruta, width=Inches(ancho_in))
+            imagen_cargada = True
+        except Exception:
+            logger.warning(f"No se pudo cargar la imagen {ruta}, usando texto alternativo.")
+            imagen_cargada = False
+
+    if not imagen_cargada:
+        # Texto sustituto elegante: aseguramos que NUNCA quede vacío
+        fallback_text = texto_alternativo
+        if not fallback_text:
+            base = os.path.basename(ruta).replace(".png", "").replace(".jpg", "").replace("_", " ").strip()
+            fallback_text = base.upper() if base else "ASEGURADORA"
+
+        r = p.add_run(fallback_text)
         r.bold = True
         r.font.size = Pt(10)
         r.font.name = FUENTE
@@ -199,9 +225,132 @@ def _buscar_valor_concepto(
     categoria: str,
     subitem: str = "",
 ) -> Any:
-    """Look up a concept value from an insurer's dictionary using ConceptMapper."""
-    if not conceptos_dict:
-        return RELLENO
+    """Add a formatted paragraph to the document."""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER if centrado else WD_ALIGN_PARAGRAPH.JUSTIFY
+    p.paragraph_format.space_after = Pt(4)
+    if vineta:
+        p.paragraph_format.left_indent = Inches(0.3)
+        contenido = "•  " + contenido
+    run = p.add_run(contenido)
+    run.font.size = Pt(tam)
+    run.font.name = FUENTE
+    run.bold = negrita
+    return p
+
+
+def _fila_banda(tabla: Any, texto_banda: str, n_cols: int, principal: bool = True) -> Any:
+    """Add a section/subsection header row spanning all columns."""
+    fila = tabla.add_row()
+    celda = fila.cells[0]
+    for otra in fila.cells[1:]:
+        celda = celda.merge(otra)
+    color = RGBColor(0xFF, 0xFF, 0xFF) if principal else AZUL
+    _texto(celda, texto_banda, negrita=True, tam=9, color=color)
+    _sombrear(celda, AZUL_HEX if principal else AZUL_CLARO_HEX)
+    return fila
+
+
+# --------------------------------------------------------------------------- #
+# Document sections                                                            #
+# --------------------------------------------------------------------------- #
+
+def _seccion_general(doc: Document, meta: dict, idx: int) -> None:
+    """Render Section I: General Information."""
+    _titulo(doc, idx, "INFORMACIÓN GENERAL")
+    vig: list[str] = []
+    vc = meta.get("vigencia_construccion") or {}
+    vm = meta.get("vigencia_mantenimiento") or {}
+    if vc:
+        vig.append(
+            f"Periodo de construcción:\nDesde: {vc.get('desde', '')}   "
+            f"Hasta: {vc.get('hasta', '')}"
+        )
+    if vm:
+        vig.append(
+            f"Periodo de mantenimiento ({vm.get('tipo', '')} – {vm.get('duracion', '')}):\n"
+            f"Desde: {vm.get('desde', '')}   Hasta: {vm.get('hasta', '')}"
+        )
+    filas = [
+        ("FECHA", meta.get("fecha", "")),
+        ("TIPO DE COBERTURA", meta.get("tipo_cobertura", "")),
+        ("TOMADOR", meta.get("tomador", "")),
+        ("ASEGURADO", meta.get("asegurado", "")),
+        ("BENEFICIARIO", meta.get("beneficiario", "")),
+        ("VIGENCIA", "\n\n".join(vig)),
+        ("UBICACIÓN", meta.get("ubicacion", "")),
+        ("VALOR ASEGURADO", _fmt_cop(meta.get("valor_asegurado"))),
+        ("DESCRIPCIÓN DEL PROYECTO", meta.get("descripcion_proyecto", "")),
+    ]
+    tabla = doc.add_table(rows=0, cols=2)
+    _bordes_tabla(tabla)
+    for etq, val in filas:
+        fila = tabla.add_row()
+        fila.cells[0].width = Inches(1.7)
+        fila.cells[1].width = Inches(4.8)
+        _texto(fila.cells[0], etq, negrita=True, tam=9, centrado=False)
+        _sombrear(fila.cells[0], GRIS_HEX)
+        _texto(fila.cells[1], val, tam=9, centrado=False)
+
+
+def _seccion_cotizaciones(doc: Document, datos: dict, assets: str, idx: int) -> None:
+    """Render Section II: Quotes Received (dynamic table with logos)."""
+    _titulo(doc, idx, "COTIZACIONES REALIZADAS")
+    tabla = doc.add_table(rows=1, cols=4)
+    _bordes_tabla(tabla)
+    encabezados = ["COMPAÑÍA DE SEGUROS", "TASA", "PRIMA", "MODALIDAD DE ASEGURAMIENTO"]
+    anchos = [1.9, 1.0, 1.6, 2.0]
+    for celda, etq, ancho in zip(tabla.rows[0].cells, encabezados, anchos):
+        _texto(celda, etq, negrita=True, tam=9, color=RGBColor(0xFF, 0xFF, 0xFF))
+        _sombrear(celda, AZUL_HEX)
+        celda.width = Inches(ancho)
+
+    for ase in datos["aseguradoras"]:
+        opciones = ase.get("opciones", [])
+        primera = None
+        for i, op in enumerate(opciones):
+            fila = tabla.add_row()
+            for celda, ancho in zip(fila.cells, anchos):
+                celda.width = Inches(ancho)
+            if i == 0:
+                primera = fila.cells[0]
+                celda_logo = fila.cells[0]
+                celda_logo.text = ""
+                cos = ase.get("coaseguro") or [{"logo": ase.get("logo"), "participacion": ""}]
+                for j, co in enumerate(cos):
+                    p = celda_logo.paragraphs[0] if j == 0 else celda_logo.add_paragraph()
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    ruta = os.path.join(assets, "logos", co.get("logo") or "")
+                    ancho_logo = 1.3 if len(cos) <= 1 else 1.0
+                    if os.path.exists(ruta):
+                        try:
+                            p.add_run().add_picture(ruta, width=Inches(ancho_logo))
+                        except Exception:
+                            p.add_run(co.get("nombre", ase.get("nombre", ""))).bold = True
+                    else:
+                        p.add_run(co.get("nombre", ase.get("nombre", ""))).bold = True
+                    if co.get("participacion"):
+                        pp = celda_logo.add_paragraph()
+                        pp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        r = pp.add_run(co["participacion"])
+                        r.bold = True
+                        r.font.size = Pt(8)
+                        r.font.name = FUENTE
+                celda_logo.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            short_name = _nombre_corto(ase)
+            etq = op.get("etiqueta", "")
+            if short_name and f"({short_name})" not in etq:
+                etq_display = f"{etq} ({short_name})"
+            else:
+                etq_display = etq
+            _texto(fila.cells[1], f"{etq_display}\n{op.get('tasa', '')}", tam=9)
+            _texto(fila.cells[2], _fmt_cop(op.get("prima")), tam=9, negrita=True)
+            _texto(fila.cells[3], op.get("modalidad", ""), tam=9)
+            _no_partir(fila)
+        if primera is not None and len(opciones) > 1:
+            ultima = tabla.rows[-1].cells[0]
+            primera.merge(ultima)
+
 
     # Exact key match
     if etiqueta in conceptos_dict:
@@ -226,7 +375,94 @@ def _buscar_valor_concepto(
         if norm_k in norm_etiqueta or norm_etiqueta in norm_k:
             return v if v not in (None, "") else RELLENO
 
-    return RELLENO
+
+def _anexos(doc: Document, datos: dict, assets: str, indice_inicial: int) -> None:
+    """Render all annexes at the end of the document."""
+
+    def titulo_anexo(n: int, etiqueta: str) -> None:
+        doc.add_page_break()
+        p = doc.add_paragraph()
+        r = p.add_run(f"ANEXO {n}")
+        r.bold = True
+        r.underline = True
+        r.font.size = Pt(12)
+        r.font.name = FUENTE
+        r.font.color.rgb = AZUL
+        p2 = doc.add_paragraph()
+        r2 = p2.add_run(etiqueta)
+        r2.bold = True
+        r2.underline = True
+        r2.font.size = Pt(11)
+        r2.font.name = FUENTE
+
+    n = 0
+    cfg = datos.get("anexos", {})
+
+    if cfg.get("leg", True):
+        n += 1
+        titulo_anexo(n, "ALCANCE LEG 2 Y LEG 3")
+        _parrafo(doc, "LEG 2 establece que:", negrita=True)
+        _parrafo(doc, TEXTO_LEG2)
+        _parrafo(doc, "LEG 3 establece que:", negrita=True)
+        _parrafo(doc, TEXTO_LEG3)
+
+    if cfg.get("tasa_prorroga", True):
+        n += 1
+        titulo_anexo(n, "TASAS DE PRÓRROGA")
+        tabla = doc.add_table(rows=1, cols=2)
+        _bordes_tabla(tabla)
+        _texto(
+            tabla.rows[0].cells[0],
+            "COMPAÑÍA DE SEGUROS",
+            negrita=True,
+            tam=9,
+            color=RGBColor(0xFF, 0xFF, 0xFF),
+        )
+        _sombrear(tabla.rows[0].cells[0], AZUL_HEX)
+        _texto(
+            tabla.rows[0].cells[1],
+            "TASA DE PRÓRROGA",
+            negrita=True,
+            tam=9,
+            color=RGBColor(0xFF, 0xFF, 0xFF),
+        )
+        _sombrear(tabla.rows[0].cells[1], AZUL_HEX)
+        for ase in datos["aseguradoras"]:
+            fila = tabla.add_row()
+            fila.cells[0].width = Inches(2.2)
+            fila.cells[1].width = Inches(4.3)
+            _logo_en_celda(
+                fila.cells[0],
+                os.path.join(assets, "logos", ase.get("logo", "")),
+                1.6,
+                texto_alternativo=_nombre_corto(ase),
+            )
+            _texto(
+                fila.cells[1],
+                ase.get("tasa_prorroga", "NO ESPECIFICA"),
+                tam=9,
+                centrado=False,
+            )
+
+    subj = [a for a in datos["aseguradoras"] if a.get("subjetividades")]
+    if subj:
+        n += 1
+        titulo_anexo(n, "SUBJETIVIDADES Y CONDICIONES PARTICULARES POR ASEGURADORA")
+        for ase in subj:
+            _parrafo(doc, ase["nombre"], negrita=True, tam=10)
+            for s in ase["subjetividades"]:
+                _parrafo(doc, s, tam=9, vineta=True)
+
+    obs = cfg.get("observaciones_adicionales") or []
+    preg = cfg.get("preguntas_cliente") or []
+    if obs or preg:
+        n += 1
+        titulo_anexo(n, "OBSERVACIONES Y PREGUNTAS DEL CLIENTE")
+        for o in obs:
+            _parrafo(doc, o, tam=9, vineta=True)
+        for item in preg:
+            _parrafo(doc, item.get("pregunta", ""), negrita=True, tam=10)
+            _parrafo(doc, item.get("respuesta", ""), tam=9)
 
 
 def _asegura_membrete(doc: Document, assets: str) -> None:
@@ -242,7 +478,10 @@ def _asegura_membrete(doc: Document, assets: str) -> None:
     p = encabezado.paragraphs[0] if encabezado.paragraphs else encabezado.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if os.path.exists(logo):
-        p.add_run().add_picture(logo, width=Inches(2.2))
+        try:
+            p.add_run().add_picture(logo, width=Inches(2.2))
+        except Exception:
+            pass
 
 
 # --------------------------------------------------------------------------- #
