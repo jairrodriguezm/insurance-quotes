@@ -15,7 +15,10 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Optional
 
-import openpyxl
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None  # type: ignore
 
 from app.core.config import settings
 
@@ -140,6 +143,10 @@ class ConceptMapper:
             logger.warning(
                 "Matriz de conceptos no encontrada en: %s. Operando sin mapeo de conceptos.",
                 self.matrix_path,
+            )
+        if openpyxl is None:
+            logger.warning(
+                "openpyxl no está disponible. Operando sin cargar matriz de conceptos Excel."
             )
             return
 
