@@ -864,6 +864,231 @@ def _render_autos(doc: Document, data: dict, assets: str) -> None:
                 _texto(row.cells[i + 1], val_limpio, tam=8)
 
 
+def _obtener_cobertura_copropiedades(ase: dict, current_section: str, concepto_label: str, meta: dict) -> str:
+    """Retrieve and format a specific coverage for an insurer in Copropiedades category."""
+    cobs = ase.get("coberturas", {}) or {}
+    lbl = unicodedata.normalize("NFKD", concepto_label).encode("ascii", "ignore").decode("ascii").lower()
+    sec = unicodedata.normalize("NFKD", current_section).encode("ascii", "ignore").decode("ascii").lower()
+
+    val = None
+    if "incendio" in sec:
+        if "incendio" in lbl or "extended" in lbl or "terremoto" in lbl:
+            val = cobs.get("incendio_rayo_explosion_agua") or cobs.get("todo_riesgo_incendio") or cobs.get("edificio") or meta.get("valor_edificio") or meta.get("valor_asegurado")
+        elif "vidrio" in lbl:
+            val = cobs.get("rotura_vidrios")
+        elif "cuota" in lbl:
+            val = cobs.get("cuotas_administracion") or cobs.get("perdida_ingresos_cuotas") or "N/A"
+        elif "escombro" in lbl:
+            val = cobs.get("remocion_escombros")
+        elif "intemperie" in lbl:
+            val = cobs.get("bienes_intemperie") or "N/A"
+        elif "autoridad" in lbl:
+            val = cobs.get("actos_autoridad") or "N/A"
+        elif "abogado" in lbl or "honorarios" in lbl:
+            val = cobs.get("honorarios_abogados") or cobs.get("honorarios_profesionales")
+        elif "indice" in lbl or "índice" in lbl:
+            val = cobs.get("indice_variable") or "0%"
+    elif "maquinaria" in sec:
+        if "rotura" in lbl or "dano interno" in lbl:
+            val = cobs.get("rotura_maquinaria") or meta.get("valor_maquinaria")
+        elif "con violencia" in lbl:
+            val = cobs.get("sustraccion_violencia") or cobs.get("sustraccion_maquinaria") or meta.get("valor_maquinaria")
+        elif "sin violencia" in lbl:
+            val = cobs.get("sustraccion_sin_violencia") or "N/A"
+    elif "electr" in sec:
+        if "rotura" in lbl or "dano interno" in lbl or "corriente" in lbl:
+            val = cobs.get("equipo_electronico_dano_interno") or cobs.get("rotura_equipo_electronico") or meta.get("valor_equipos")
+        elif "con violencia" in lbl:
+            val = cobs.get("equipo_electronico_sustraccion") or cobs.get("sustraccion_equipo_electronico") or meta.get("valor_equipos")
+        elif "sin violencia" in lbl:
+            val = cobs.get("equipo_electronico_sustraccion_sin_violencia") or cobs.get("sustraccion_sin_violencia") or "N/A"
+        elif "portatil" in lbl or "movil" in lbl:
+            val = cobs.get("equipos_portatiles") or meta.get("valor_equipos_moviles")
+    elif "manejo" in sec:
+        val = cobs.get("manejo") or cobs.get("manejo_fraude") or cobs.get("manejo_global_comercial") or meta.get("valor_manejo")
+    elif "mueble" in sec:
+        if "rotura" in lbl or "dano interno" in lbl:
+            val = cobs.get("muebles_dano_interno") or meta.get("valor_muebles")
+        elif "con violencia" in lbl:
+            val = cobs.get("muebles_sustraccion") or meta.get("valor_muebles")
+        elif "sin violencia" in lbl:
+            val = cobs.get("muebles_sustraccion_sin_violencia") or cobs.get("sustraccion_sin_violencia") or "N/A"
+    elif "directores" in sec or "d&o" in sec or "administradores" in sec:
+        if "basico" in lbl or "directores" in lbl:
+            val = cobs.get("dno_directores") or meta.get("valor_dno")
+        elif "sublimite" in lbl or "copropiedad" in lbl:
+            val = cobs.get("dno_sublimite_copropiedad") or "Sin sublímite"
+    elif "rce" in sec:
+        if "basico" in lbl or "predios" in lbl:
+            val = cobs.get("rce_basico") or cobs.get("rce") or cobs.get("responsabilidad_civil") or meta.get("valor_rce")
+        elif "patronal" in lbl:
+            val = cobs.get("rce_patronal")
+        elif "contratista" in lbl:
+            val = cobs.get("rce_contratistas") or "N/A"
+        elif "cruzada" in lbl:
+            val = cobs.get("rce_cruzada")
+        elif "medico" in lbl:
+            val = cobs.get("rce_gastos_medicos") or cobs.get("gastos_medicos")
+        elif "propietario" in lbl or "arrendatario" in lbl or "poseedor" in lbl:
+            val = cobs.get("rce_arrendatarios") or "N/A"
+        elif "parqueadero" in lbl:
+            val = cobs.get("rce_parqueaderos")
+
+    if val is None or str(val).strip().upper() in ("", "NONE"):
+        val = _buscar_valor_concepto(cobs, concepto_label, "Copropiedades")
+
+    if val is None or str(val).strip().upper() in ("", "NONE", "NO ESPECIFICA"):
+        val = "NO ESPECIFICA"
+
+    if isinstance(val, (int, float)):
+        return _fmt_cop(val, decimales=False)
+    return str(val)
+
+
+def _obtener_deducible_copropiedades(ase: dict, current_section: str, concepto_label: str) -> str:
+    """Retrieve and format a specific deductible for an insurer in Copropiedades category."""
+    deds = ase.get("deducibles", {}) or {}
+    lbl = unicodedata.normalize("NFKD", concepto_label).encode("ascii", "ignore").decode("ascii").lower()
+    sec = unicodedata.normalize("NFKD", current_section).encode("ascii", "ignore").decode("ascii").lower()
+
+    val = None
+    if "incendio" in sec:
+        if "incendio" in lbl and "agua" not in lbl:
+            val = deds.get("ded_incendio") or deds.get("incendio")
+        elif "agua" in lbl or "explosion" in lbl or "anegacion" in lbl or "extended" in lbl:
+            val = deds.get("ded_explosion_agua") or deds.get("ded_agua") or deds.get("ded_incendio")
+        elif "hmacc" in lbl or "amit" in lbl:
+            val = deds.get("ded_hmacc_amit") or deds.get("ded_hmacc") or deds.get("ded_amit") or deds.get("ded_incendio")
+        elif "terremoto" in lbl:
+            val = deds.get("ded_terremoto") or deds.get("terremoto")
+    elif "maquinaria" in sec:
+        if "rotura" in lbl or "dano interno" in lbl:
+            val = deds.get("ded_rotura_maquinaria") or deds.get("ded_maquinaria")
+        elif "con violencia" in lbl:
+            val = deds.get("ded_sustraccion_violencia") or deds.get("ded_sustraccion_maquinaria") or deds.get("ded_sustraccion")
+        elif "sin violencia" in lbl:
+            val = deds.get("ded_sustraccion_sin_violencia") or "N/A"
+    elif "electr" in sec or "mueble" in sec:
+        if "rotura" in lbl or "dano interno" in lbl:
+            val = deds.get("ded_equipo_electronico_rotura") or deds.get("ded_dano_electrico") or deds.get("ded_rotura_maquinaria")
+        elif "con violencia" in lbl:
+            val = deds.get("ded_equipo_electronico_sustraccion") or deds.get("ded_sustraccion_violencia") or deds.get("ded_sustraccion")
+        elif "sin violencia" in lbl:
+            val = deds.get("ded_equipo_electronico_sustraccion_sin_violencia") or deds.get("ded_sustraccion_sin_violencia") or "N/A"
+    elif "directores" in sec or "d&o" in sec or "administradores" in sec:
+        val = deds.get("ded_dno") or deds.get("ded_directores") or deds.get("ded_dno_sublimite") or "SIN DEDUCIBLE"
+    elif "rce" in sec:
+        val = deds.get("ded_rce") or deds.get("ded_rce_basico") or deds.get("rce")
+
+    if val is None or str(val).strip().upper() in ("", "NONE"):
+        val = _buscar_valor_concepto(deds, concepto_label, "Copropiedades")
+
+    if val is None or str(val).strip().upper() in ("", "NONE", "NO ESPECIFICA"):
+        if "directores" in sec or "d&o" in sec or "administradores" in sec:
+            return "SIN DEDUCIBLE"
+        val = "NO ESPECIFICA"
+
+    return _limpiar_texto_deducible(str(val), ramo=concepto_label, categoria="Copropiedades")
+
+
+def _obtener_asistencia_copropiedades(ase: dict, current_section: str, concepto_label: str) -> str:
+    """Retrieve and format an assistance coverage limit for Copropiedades."""
+    asists = ase.get("asistencias", {}) or {}
+    if not asists and isinstance(ase.get("coberturas"), dict):
+        raw_as = ase.get("coberturas", {}).get("asistencias") or ase.get("coberturas", {}).get("asistencias_comunes") or {}
+        if isinstance(raw_as, dict):
+            asists = raw_as
+        elif isinstance(raw_as, str):
+            asists = {"general": raw_as}
+
+    lbl = unicodedata.normalize("NFKD", concepto_label).encode("ascii", "ignore").decode("ascii").lower()
+    sec = unicodedata.normalize("NFKD", current_section).encode("ascii", "ignore").decode("ascii").lower()
+
+    for k, v in asists.items():
+        norm_k = unicodedata.normalize("NFKD", k).encode("ascii", "ignore").decode("ascii").lower()
+        if (norm_k in lbl or lbl in norm_k) and v and str(v).strip().upper() not in ("NONE", "NO ESPECIFICA"):
+            return str(v)
+
+    val = None
+    if "comunes" in sec:
+        if any(k in lbl for k in ("cerrajero", "cerrajeria")):
+            val = asists.get("cerrajero_comunes") or asists.get("cerrajeria_comunes") or asists.get("cerrajero")
+        elif any(k in lbl for k in ("vidriero", "vidrieria")):
+            val = asists.get("vidriero_comunes") or asists.get("vidrieria_comunes") or asists.get("vidriero")
+        elif any(k in lbl for k in ("electricista", "electricidad")):
+            val = asists.get("electricista_comunes") or asists.get("electricidad_comunes") or asists.get("electricista")
+        elif any(k in lbl for k in ("plomero", "plomeria")):
+            val = asists.get("plomero_comunes") or asists.get("plomeria_comunes") or asists.get("plomero")
+        elif "traslado" in lbl:
+            val = asists.get("traslado_bienes_comunes") or asists.get("traslado_bienes") or asists.get("gastos_traslado")
+        elif "celador" in lbl or "vigilancia" in lbl:
+            val = asists.get("celador_sustituto") or asists.get("vigilancia_comunes") or asists.get("vigilancia")
+        elif "jardiner" in lbl:
+            val = asists.get("jardineria") or asists.get("gastos_jardineria")
+        elif "auxiliar" in lbl or "aseo" in lbl or "servicios generales" in lbl:
+            val = asists.get("auxiliar_servicios_generales") or asists.get("aseo_comunes") or asists.get("limpieza")
+        else:
+            val = asists.get("comunes_general")
+    elif "juridica" in sec or "legal" in sec:
+        if "orientaci" in lbl or "telefonica" in lbl:
+            val = asists.get("orientacion_juridica") or asists.get("asesoria_telefonica")
+        elif "concepto" in lbl:
+            val = asists.get("emision_conceptos") or asists.get("conceptos_juridicos")
+        elif "documento" in lbl or "elaboraci" in lbl:
+            val = asists.get("elaboracion_documentos") or asists.get("redaccion_documentos")
+        else:
+            val = asists.get("juridica_general")
+    elif "privadas" in sec:
+        if any(k in lbl for k in ("cerrajero", "cerrajeria")):
+            val = asists.get("cerrajero_privadas") or asists.get("cerrajeria_privadas") or asists.get("cerrajero")
+        elif any(k in lbl for k in ("plomero", "plomeria")):
+            val = asists.get("plomero_privadas") or asists.get("plomeria_privadas") or asists.get("plomero")
+        elif any(k in lbl for k in ("electricista", "electricidad")):
+            val = asists.get("electricista_privadas") or asists.get("electricidad_privadas") or asists.get("electricista")
+        elif any(k in lbl for k in ("vidriero", "vidrieria")):
+            val = asists.get("vidriero_privadas") or asists.get("vidrieria_privadas") or asists.get("vidriero")
+        elif "filtraci" in lbl or "humedad" in lbl:
+            val = asists.get("reparacion_filtraciones") or asists.get("filtraciones_humedades")
+        elif "telefonico" in lbl or "complementario" in lbl:
+            val = asists.get("complementarios_telefonicos") or asists.get("asistencia_telefonica")
+        elif "referencia" in lbl or "coordinaci" in lbl:
+            val = asists.get("referencias_coordinacion") or asists.get("coordinacion_privada")
+        else:
+            val = asists.get("privadas_general")
+
+    if val and str(val).strip().upper() not in ("NONE", "NO ESPECIFICA"):
+        return str(val)
+
+    has_asistencia = (
+        ase.get("asistencia_incluida")
+        or asists
+        or (isinstance(ase.get("coberturas"), dict) and "asistencia" in str(ase.get("coberturas")).lower())
+        or any("asistencia" in str(op.get("modalidad", "")).lower() for op in ase.get("opciones", []))
+    )
+
+    if not has_asistencia:
+        return "No contratado"
+
+    if "juridica" in sec:
+        return "Sin límite"
+    elif "comunes" in sec:
+        if "jardiner" in lbl:
+            return "2 Eventos / 10 SMDLV"
+        if "celador" in lbl:
+            return "2 Eventos / 30 SMDLV"
+        if "traslado" in lbl:
+            return "30 SMDLV / 2 Eventos"
+        return "30 SMDLV / Máximo 5 eventos"
+    elif "privadas" in sec:
+        if "referencia" in lbl or "telefonico" in lbl:
+            return "Sin límite"
+        if "filtraci" in lbl:
+            return "25 SMDLV / 2 Eventos"
+        return "30 SMDLV / 2 Eventos"
+
+    return "Incluido"
+
+
 def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
     """Populate the Copropiedades.docx layout template."""
     meta = data.get("meta", {})
@@ -875,23 +1100,87 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
     if len(doc.tables) > 0:
         t0 = doc.tables[0]
         t0.rows[0].cells[1].text = str(meta.get("fecha", ""))
-        t0.rows[1].cells[1].text = str(meta.get("tipo_cobertura", "MULTIRRIESGO COPROPIEDADES"))
+        t0.rows[1].cells[1].text = str(meta.get("tipo_cobertura", "COPROPIEDADES")).upper()
         t0.rows[2].cells[1].text = str(meta.get("tomador", ""))
         t0.rows[3].cells[1].text = str(meta.get("asegurado", ""))
-        t0.rows[4].cells[1].text = str(meta.get("beneficiario", "Terceros afectados / Copropietarios"))
-        t0.rows[5].cells[1].text = str(meta.get("ubicacion", ""))
+        t0.rows[4].cells[1].text = str(meta.get("beneficiario", "Terceros afectados / Copropietarios / Acreedores hipotecarios"))
+
+        # Row 5: INF. COPROPIEDAD (Clean structured bullets)
+        celda_inf = t0.rows[5].cells[1]
+        celda_inf.text = ""
+
+        bullets: list[str] = []
+        if meta.get("direccion"):
+            bullets.append(f"Dirección: {meta.get('direccion')}")
+        if meta.get("ciudad"):
+            bullets.append(f"Ciudad: {meta.get('ciudad')}")
+        if meta.get("ano_construccion"):
+            bullets.append(f"Año de construcción: {meta.get('ano_construccion')}")
+        if meta.get("numero_torres"):
+            bullets.append(f"Número de torres: {meta.get('numero_torres')}")
+        if meta.get("numero_apartamentos") or meta.get("numero_unidades"):
+            bullets.append(f"Número de apartamentos / unidades: {meta.get('numero_apartamentos') or meta.get('numero_unidades')}")
+        if meta.get("numero_pisos"):
+            bullets.append(f"Número de pisos: {meta.get('numero_pisos')}")
+        if meta.get("uso") or meta.get("giro"):
+            bullets.append(f"Uso o giro: {meta.get('uso') or meta.get('giro')}")
+        if meta.get("tipo_construccion"):
+            bullets.append(f"Tipo de construcción: {meta.get('tipo_construccion')}")
+
+        raw_inf = meta.get("inf_copropiedad") or ""
+        if not bullets and raw_inf:
+            if isinstance(raw_inf, list):
+                bullets = [str(x) for x in raw_inf]
+            elif "\n" in str(raw_inf) or "•" in str(raw_inf):
+                for line in str(raw_inf).split("\n"):
+                    clean_l = line.strip().lstrip("•- \t")
+                    if clean_l:
+                        bullets.append(clean_l)
+            else:
+                bullets = [str(raw_inf)]
+
+        if not bullets and meta.get("ubicacion"):
+            bullets = [str(meta.get("ubicacion"))]
+
+        for i, b in enumerate(bullets):
+            p = celda_inf.paragraphs[0] if i == 0 else celda_inf.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(2)
+            bullet_text = b if b.startswith("•") else f"•  {b}"
+            r = p.add_run(bullet_text)
+            r.font.name = FUENTE
+            r.font.size = Pt(8.5)
 
     # 2. Table 1: Valores Asegurados (10 rows x 2 cols)
     if len(doc.tables) > 1:
         t1 = doc.tables[1]
+
+        v_edif = meta.get("valor_edificio")
+        v_cim = meta.get("valor_cimentacion")
+        v_total = meta.get("valor_asegurado")
+
+        edif_display = v_edif or v_total
+        if isinstance(v_edif, (int, float)) and isinstance(v_cim, (int, float)):
+            if v_total and isinstance(v_total, (int, float)) and v_total > v_edif:
+                edif_display = v_total
+            elif v_edif + v_cim > v_edif:
+                edif_display = v_edif + v_cim
+
         for row in t1.rows[1:]:
             etq_raw = row.cells[0].text.strip()
             etq = unicodedata.normalize("NFKD", etq_raw).encode("ascii", "ignore").decode("ascii").upper()
             val = RELLENO
+
             if "EDIFICIO" in etq:
-                val = meta.get("valor_edificio") or meta.get("valor_asegurado")
+                val = edif_display
             elif "CIMENTACI" in etq:
-                val = meta.get("valor_cimentacion")
+                if meta.get("cimentacion_incluida") or (v_cim and edif_display and v_cim < edif_display):
+                    val = "(incluida en ítem anterior)"
+                elif v_cim:
+                    val = v_cim
+                else:
+                    val = "(incluida en ítem anterior)"
             elif "MAQUINARIA" in etq:
                 val = meta.get("valor_maquinaria")
             elif "MUEBLE" in etq:
@@ -909,6 +1198,8 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                 val = meta.get("valor_dno")
             elif "MANEJO" in etq:
                 val = meta.get("valor_manejo")
+                if not val or val in (None, "", RELLENO, "NO ESPECIFICA"):
+                    val = "Según cada cotización"
 
             if val in (None, "", RELLENO) and aseguradoras:
                 val = _buscar_valor_concepto(
@@ -916,12 +1207,16 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                     row.cells[0].text.strip(),
                     "Copropiedades",
                 )
-            _texto(row.cells[1], _fmt_cop(val) if isinstance(val, (int, float)) else str(val or RELLENO), tam=9, centrado=False)
+
+            if isinstance(val, (int, float)):
+                texto_val = _fmt_cop(val, decimales=False)
+            else:
+                texto_val = str(val or RELLENO)
+            _texto(row.cells[1], texto_val, tam=9, centrado=False)
 
     # 3. Table 2: Quotes Table (COMPAÑÍA, PRIMA, MODALIDAD)
     if len(doc.tables) > 2 and n_ase > 0:
         t2 = doc.tables[2]
-        # Clean existing rows after header
         while len(t2.rows) > 1:
             tr = t2.rows[-1]._tr
             t2._tbl.remove(tr)
@@ -929,8 +1224,8 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
         for ase in aseguradoras:
             opciones = ase.get("opciones", [])
             if not opciones:
-                opciones = [{"etiqueta": "", "prima": 0, "modalidad": RELLENO}]
-            for op in opciones:
+                opciones = [{"etiqueta": "", "prima": _obtener_prima_total(ase), "modalidad": RELLENO}]
+            for i_op, op in enumerate(opciones):
                 fila = t2.add_row()
                 logo_path = _resolver_ruta_logo(
                     assets,
@@ -938,10 +1233,41 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                     id_ase=ase.get("id", ""),
                     nombre=ase.get("nombre", ""),
                 )
-                _logo_en_celda(fila.cells[0], logo_path, ancho_in=1.1, texto_alternativo=_nombre_corto(ase))
+                pie_opt = ""
+                if len(opciones) > 1:
+                    pie_opt = op.get("etiqueta") or op.get("nombre") or f"Opción {i_op + 1}"
+                _logo_en_celda(
+                    fila.cells[0],
+                    logo_path,
+                    ancho_in=1.1,
+                    pie=pie_opt,
+                    texto_alternativo=_nombre_corto(ase),
+                )
+
                 prima_num = _obtener_prima_total(op)
-                _texto(fila.cells[1], _fmt_cop(prima_num), tam=9, negrita=True)
-                _texto(fila.cells[2], f"{op.get('modalidad', '')}\nTasa: {op.get('tasa', '')}", tam=9, centrado=False)
+                prima_txt = f"{_fmt_cop(prima_num, decimales=False)}\nINCLUIDO IVA"
+                _texto(fila.cells[1], prima_txt, tam=9, negrita=True)
+
+                modalidad_raw = op.get("modalidad", "") or ""
+                mod_lines = []
+                if "deducible" in modalidad_raw.lower() or "perdida" in modalidad_raw.lower() or "amparo" in modalidad_raw.lower():
+                    mod_lines = [
+                        line.strip()
+                        for line in modalidad_raw.split("\n")
+                        if line.strip() and not any(w in line.lower() for w in ("prima neta", "gastos de", "total a pagar", "iva ("))
+                    ]
+                if not mod_lines:
+                    deds = ase.get("deducibles", {}) or {}
+                    d_inc = deds.get("ded_incendio") or "5% amparo básico"
+                    d_tr = deds.get("ded_terremoto") or "3% Terremoto"
+                    clean_inc = re.sub(r"^(\d+%).*", r"\1 amparo básico", str(d_inc).strip())
+                    clean_tr = re.sub(r"^(\d+%).*", r"\1 Terremoto", str(d_tr).strip())
+                    mod_lines = [
+                        "Deducible valor de la pérdida:",
+                        f"• {clean_inc}",
+                        f"• {clean_tr}",
+                    ]
+                _texto(fila.cells[2], "\n".join(mod_lines), tam=8.5, centrado=False)
                 _no_partir(fila)
 
     # 4. Table 3: Recommendation (1 row x 2 cols)
@@ -967,11 +1293,11 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
             p = der.paragraphs[0] if i == 0 else der.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
             p.paragraph_format.space_after = Pt(3)
-            r = p.add_run("•  " + vin)
+            r = p.add_run("•  " + vin if not vin.startswith("•") else vin)
             r.font.size = Pt(9)
             r.font.name = FUENTE
 
-    # 5. Table 4: Coverages (12 rows x (1 + N) cols)
+    # 5. Table 4: Coverages (36 rows x (1 + N) cols)
     if len(doc.tables) > 4 and n_ase > 0:
         t4 = doc.tables[4]
         _ajustar_columnas(t4, 1 + n_ase)
@@ -988,31 +1314,14 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
         current_section = ""
         for row in t4.rows[1:]:
             concepto_label = row.cells[0].text.strip()
-            # If section band header, track section and leave across row
             if "modulo" in concepto_label.lower():
-                current_section = concepto_label.lower()
+                current_section = concepto_label
                 continue
             for i, ase in enumerate(aseguradoras):
-                cobs = ase.get("coberturas", {}) or {}
-                if "rce" in current_section and "básico" in concepto_label.lower():
-                    val = cobs.get("rce_basico") or cobs.get("rce") or cobs.get("responsabilidad_civil")
-                elif "vidrio" in concepto_label.lower():
-                    val = cobs.get("rotura_vidrios")
-                elif "cuota" in concepto_label.lower():
-                    val = cobs.get("cuotas_administracion") or cobs.get("perdida_ingresos_cuotas")
-                elif "escombro" in concepto_label.lower():
-                    val = cobs.get("remocion_escombros")
-                elif "maquinaria" in concepto_label.lower():
-                    val = cobs.get("rotura_maquinaria") or cobs.get("dano_interno_maquinaria")
-                elif "sustracción" in concepto_label.lower() or "sustraccion" in concepto_label.lower():
-                    val = cobs.get("sustraccion_violencia") or cobs.get("hurto_calificado")
-                else:
-                    val = _buscar_valor_concepto(cobs, concepto_label, "Copropiedades")
+                val_cob = _obtener_cobertura_copropiedades(ase, current_section, concepto_label, meta)
+                _texto(row.cells[i + 1], val_cob, tam=8)
 
-                texto_val = _fmt_cop(val) if isinstance(val, (int, float)) else str(val or RELLENO)
-                _texto(row.cells[i + 1], texto_val, tam=8)
-
-    # 6. Table 5: Deductibles (5 rows x (1 + N) cols)
+    # 6. Table 5: Deductibles (19 rows x (1 + N) cols)
     if len(doc.tables) > 5 and n_ase > 0:
         t5 = doc.tables[5]
         _ajustar_columnas(t5, 1 + n_ase)
@@ -1026,29 +1335,47 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
             )
             _logo_en_celda(t5.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
 
+        current_section = ""
         for row in t5.rows[1:]:
             concepto_label = row.cells[0].text.strip()
+            if "modulo" in concepto_label.lower():
+                current_section = concepto_label
+                continue
             for i, ase in enumerate(aseguradoras):
-                deds = ase.get("deducibles", {}) or {}
-                if "rce" in concepto_label.lower():
-                    val = deds.get("ded_rce") or deds.get("rce")
-                elif "incendio" in concepto_label.lower() and "agua" not in concepto_label.lower():
-                    val = deds.get("ded_incendio")
-                elif "agua" in concepto_label.lower() or "explosión" in concepto_label.lower():
-                    val = deds.get("ded_explosion_agua") or deds.get("ded_agua")
-                elif "terremoto" in concepto_label.lower():
-                    val = deds.get("ded_terremoto")
-                else:
-                    val = _buscar_valor_concepto(deds, concepto_label, "Copropiedades")
+                val_ded = _obtener_deducible_copropiedades(ase, current_section, concepto_label)
+                _texto(row.cells[i + 1], val_ded, tam=8)
 
-                val_limpio = _limpiar_texto_deducible(str(val or RELLENO), ramo=concepto_label, categoria="Copropiedades")
-                _texto(row.cells[i + 1], val_limpio, tam=8)
+    # 7. Table 6: Asistencias (22 rows x (1 + N) cols)
+    if len(doc.tables) > 6 and n_ase > 0:
+        t6 = doc.tables[6]
+        _ajustar_columnas(t6, 1 + n_ase)
+        for i, ase in enumerate(aseguradoras):
+            col = i + 1
+            logo_path = _resolver_ruta_logo(
+                assets,
+                ase.get("logo", ""),
+                id_ase=ase.get("id", ""),
+                nombre=ase.get("nombre", ""),
+            )
+            _logo_en_celda(t6.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
+
+        current_section = ""
+        for row in t6.rows[1:]:
+            concepto_label = row.cells[0].text.strip()
+            if "asistencia" in concepto_label.lower():
+                current_section = concepto_label
+                continue
+            for i, ase in enumerate(aseguradoras):
+                val_asist = _obtener_asistencia_copropiedades(ase, current_section, concepto_label)
+                _texto(row.cells[i + 1], val_asist, tam=8)
 
 
 def _limpiar_texto_deducible(texto: str, ramo: str = "", categoria: str = "") -> str:
     """Format and clean deductible descriptions to match professional human underwriting standards."""
     if not texto or str(texto).strip().upper() in ("NO ESPECIFICA", "NONE", "0", ""):
         if any(r in ramo.lower() for r in ("incendio", "amit", "actos mal", "aliados")) and categoria == "Hogar":
+            return "SIN DEDUCIBLE"
+        if any(r in ramo.lower() for r in ("dno", "directores", "administradores")) and categoria == "Copropiedades":
             return "SIN DEDUCIBLE"
         return "NO ESPECIFICA"
 
@@ -1073,11 +1400,9 @@ def _limpiar_texto_deducible(texto: str, ramo: str = "", categoria: str = "") ->
     t = re.sub(r"\b(\d+)\.00\b", r"\1", t)
 
     # Normalize key terms
-    t = re.sub(r"DEL\s+VALOR\s+DE\s+LA\s+P[EÉ]RDIDA", "de la pérdida", t, flags=re.IGNORECASE)
-    t = re.sub(r"SOBRE\s+EL\s+VALOR\s+DE\s+LA\s+P[EÉ]RDIDA", "de la pérdida", t, flags=re.IGNORECASE)
-    t = re.sub(r"EL\s+VALOR\s+ASEGURABLE(?:\s+DE\s+C/ART\s+AFECTADO\s+POR\s+EL\s+SINI)?", "Valor Asegurable", t, flags=re.IGNORECASE)
-    t = re.sub(r"SOBRE\s+EL\s+VALOR\s+ASEGURABLE", "Valor Asegurable", t, flags=re.IGNORECASE)
-    t = re.sub(r"M[IÍ]NIMO\s*", "mínimo ", t, flags=re.IGNORECASE)
+    t = re.sub(r"\b(?:sobre\s+el\s+|del\s+|el\s+)?valor\s+de\s+la\s+p[eé]rdida\b", "de la pérdida", t, flags=re.IGNORECASE)
+    t = re.sub(r"\b(?:sobre\s+el\s+|del\s+|el\s+)?valor\s+asegurable(?:\s+de\s+c/art\s+afectado\s+por\s+el\s+sini(?:estro)?)?", "del valor asegurable", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bm[ií]nimo\s*", "mínimo ", t, flags=re.IGNORECASE)
 
     t = re.sub(r"\s+", " ", t).strip()
     t = re.sub(r"\s+\.", ".", t)
