@@ -26,6 +26,7 @@ class TestConceptMapper(unittest.TestCase):
         self.assertIn("sura", self.mapper.insurers)
         self.assertIn("zurich", self.mapper.insurers)
         self.assertIn("chubb", self.mapper.insurers)
+        self.assertIn("mapfre", self.mapper.insurers)
 
     def test_category_normalization(self):
         """Test normalization of user-supplied category names."""
@@ -56,7 +57,7 @@ class TestConceptMapper(unittest.TestCase):
             map_concept_to_sfc("Gastos de Movilización", "Autos"),
             "Gastos de Transporte Por Pérdidas Totales",
         )
-        # Synonym for RCE Daños a bienes de terceros: 'Daños a Terceros'
+        # Synonym for RCE Daños a bienes de Terceros: 'Daños a Terceros'
         self.assertEqual(
             map_concept_to_sfc("Daños a Terceros", "Autos"),
             "RCE Daños a bienes de Terceros",
@@ -76,11 +77,22 @@ class TestConceptMapper(unittest.TestCase):
         )
 
     def test_copropiedades_concept_mapping(self):
-        """Test concept mapping for Copropiedades insurer synonyms."""
-        # 'Rotura de Maquinaria' -> 'Rotura de maquinaria (daño interno)'
+        """Test concept mapping for Copropiedades insurer synonyms and new items."""
         self.assertEqual(
             map_concept_to_sfc("Rotura de Maquinaria", "Copropiedades"),
             "Rotura de maquinaria (daño interno)",
+        )
+        self.assertEqual(
+            map_concept_to_sfc("rce_vehiculos", "Copropiedades"),
+            "Vehículos propios y no propios",
+        )
+        self.assertEqual(
+            map_concept_to_sfc("reparacion_propiedades_vecinas", "Copropiedades"),
+            "Gastos de reparación de propiedades vecinas de terceros derivados de una R.C.E.",
+        )
+        self.assertEqual(
+            map_concept_to_sfc("reparacion_antena_colectiva", "Copropiedades"),
+            "Gastos de reparación de antena colectiva",
         )
 
     def test_trc_concept_mapping(self):

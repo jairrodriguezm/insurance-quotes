@@ -75,21 +75,62 @@ BUILTIN_SYNONYMS: dict[str, dict[str, list[str]]] = {
         ],
     },
     "Copropiedades": {
-        "Incendio y/o rayo, Explosión, Daños por agua, Anegación": [
-            "incendio_rayo_explosion_agua", "danos_materiales", "incendio", "modulo basico de incendio", "explosion", "danos por agua", "ded_incendio", "ded_explosion_agua"
+        "Incendio y/o rayo, Explosión, Daños por agua, Anegación, deslizamiento y avalancha, Extended coverage, Terremoto, temblor y/o erupción volcánica, HMACC, AMIT": [
+            "incendio_rayo_explosion_agua", "todo_riesgo_incendio", "danos_materiales", "incendio", "modulo basico de incendio", "edificio areas comunes", "ded_incendio"
+        ],
+        "Explosión, Daños por agua, Anegación, deslizamiento y avalancha, Extended coverage": [
+            "ded_explosion_agua", "explosion", "danos por agua", "anegacion", "extended coverage"
+        ],
+        "HMACC, AMIT": [
+            "ded_hmacc_amit", "hmacc", "amit", "huelga motin asonada y terrorismo", "sabotaje", "terrorismo"
         ],
         "Terremoto, temblor y/o erupción volcánica, HMACC, AMIT": [
-            "terremoto_hmacc_amit", "terremoto", "hmacc", "amit", "sabotaje", "terrorismo", "ded_terremoto"
+            "terremoto_hmacc_amit", "terremoto", "terremoto temblor y erupcion volcanica", "ded_terremoto"
         ],
         "Rotura de vidrios": ["rotura_vidrios", "vidrios", "rotura accidental de vidrios"],
-        "Pago cuotas de Administración": ["cuotas_administracion", "perdida de cuotas", "pago cuotas"],
+        "Pago cuotas de Administración": ["cuotas_administracion", "perdida_ingresos_cuotas", "perdida de cuotas", "pago cuotas"],
         "Remoción de escombros": ["remocion_escombros", "escombros"],
-        "Rotura de maquinaria (daño interno)": ["rotura_maquinaria", "dano interno", "maquinaria", "rotura de maquinaria", "ded_rotura_maquinaria"],
-        "Sustracción con violencia": ["sustraccion_violencia", "hurto", "hurto calificado"],
-        "Básico": ["rce_basico", "rce", "responsabilidad civil extracontractual", "rce predios labores y operaciones", "ded_rce"],
+        "Rotura de maquinaria (daño interno)": [
+            "rotura_maquinaria", "dano interno", "maquinaria", "rotura de maquinaria", "maquinaria y equipos comunales", "ded_rotura_maquinaria"
+        ],
+        "Rotura (daño interno)": [
+            "equipo_electronico_dano_interno", "muebles_dano_interno", "muebles y enseres", "ded_equipo_electronico_rotura"
+        ],
+        "Sustracción con violencia": [
+            "sustraccion_violencia", "hurto", "hurto calificado", "equipo_electronico_sustraccion", "muebles_sustraccion", "ded_sustraccion_violencia", "ded_equipo_electronico_sustraccion"
+        ],
+        "Sustracción sin violencia (excluye dineros)": [
+            "sustraccion_sin_violencia", "hurto simple", "equipo_electronico_sustraccion_sin_violencia", "muebles_sustraccion_sin_violencia", "ded_equipo_electronico_sustraccion_sin_violencia"
+        ],
+        "Básico": ["rce_basico", "rce", "rce copropiedad luc", "responsabilidad civil extracontractual", "rce predios labores y operaciones", "ded_rce"],
         "RCE Básico": ["rce_basico", "rce", "responsabilidad civil", "ded_rce"],
-        "D&O": ["dno_directores", "directores", "administradores", "d&o", "dno"],
-        "Manejo": ["manejo_fraude", "manejo", "fraude", "infidelidad", "ded_manejo"],
+        "R.C. Patronal": ["rce_patronal", "rc patronal", "patronal"],
+        "Contratistas y Subcontratistas": ["rce_contratistas", "rce contratistas independientes", "contratistas"],
+        "R.C. Cruzada": ["rce_cruzada", "rc cruzada", "cruzada"],
+        "Gastos médicos": ["rce_gastos_medicos", "gastos medicos"],
+        "Parqueaderos": ["rce_parqueaderos", "parqueaderos"],
+        "Vehículos propios y no propios": ["rce_vehiculos", "vehiculos propios y no propios", "rc vehiculos"],
+        "D&O": ["dno_directores", "directores y administradores (d&o)", "directores", "administradores", "d&o", "dno", "ded_dno"],
+        "Manejo": ["manejo", "manejo_fraude", "manejo y fraude de administradores", "fraude", "infidelidad", "ded_manejo"],
+        "Envío y pago de cerrajero por emergencia": ["cerrajero_comunes", "cerrajero_privadas", "cerrajeria"],
+        "Envío y pago de vidriero por emergencia": ["vidriero_comunes", "vidriero_privadas", "vidrieria"],
+        "Envío y pago de electricista por emergencia": ["electricista_comunes", "electricista_privadas", "electricidad"],
+        "Envío y pago de plomero por emergencia": ["plomero_comunes", "plomero_privadas", "plomeria"],
+        "Gastos de traslado de bienes": ["traslado_bienes_comunes", "traslado de bienes"],
+        "Gastos de celador sustituto": ["celador_sustituto", "celador", "vigilancia sustituta"],
+        "Gastos de reparación de propiedades vecinas de terceros derivados de una R.C.E.": [
+            "reparacion_propiedades_vecinas", "propiedades vecinas"
+        ],
+        "Remoción de Escombros": ["remocion_escombros_asistencia"],
+        "Gastos de jardinería": ["jardineria", "gastos de jardineria"],
+        "Gastos de reparación de antena colectiva": ["reparacion_antena_colectiva", "antena colectiva"],
+        "Auxiliar de servicios generales": ["auxiliar_servicios_generales", "servicios generales"],
+        "Orientación jurídica": ["orientacion_juridica", "orientacion juridica telefonica"],
+        "Emisión de Conceptos": ["emision_conceptos", "conceptos juridicos"],
+        "Elaboración de documentos": ["elaboracion_documentos", "documentos legales"],
+        "Reparación filtraciones y humedades": ["reparacion_filtraciones", "filtraciones", "humedades"],
+        "Servicios complementarios telefónicos": ["complementarios_telefonicos", "asistencia telefonica"],
+        "Información, referencias y coordinación área privada": ["referencias_coordinacion", "coordinacion area privada"],
     },
     "Todo_Riesgo_Construccion": {
         "Daños materiales (Cobertura A)": ["danos_materiales", "dano_material", "cobertura a"],

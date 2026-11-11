@@ -53,7 +53,7 @@ class Recommendation(BaseModel):
     """AI-generated recommendation for the best insurance option."""
 
     aseguradora_id: str = Field(description="ID de la aseguradora recomendada")
-    opcion: str = Field(description="Opción recomendada, ej: 'Opción 1 – LEG 2/96 100%'")
+    opcion: str = Field(description="Opción recomendada, ej: 'Opción 1 – LEG 2/96 100%' o 'Opción 2'")
     vinetas: list[str] = Field(
         description="Lista de argumentos objetivos que sustentan la recomendación"
     )
@@ -113,12 +113,18 @@ class MetaInfo(BaseModel):
     siniestros_previos: str = "NO ESPECIFICA"
 
     # Copropiedades
-    valor_cimentacion: Optional[Union[int, float]] = None
+    valor_cimentacion: Optional[Union[int, float, str]] = None
     valor_maquinaria: Optional[Union[int, float]] = None
     valor_equipos_moviles: Optional[Union[int, float]] = None
     valor_rce: Optional[Union[int, float]] = None
     valor_dno: Optional[Union[int, float]] = None
-    valor_manejo: Optional[Union[int, float]] = None
+    valor_manejo: Optional[Union[int, float, str]] = None
+    numero_torres: str = ""
+    numero_apartamentos: str = ""
+    numero_pisos: str = ""
+    uso: str = ""
+    tipo_construccion: str = ""
+    inf_copropiedad: str = ""
 
 
 class InsuranceCompanyData(BaseModel):
@@ -134,6 +140,7 @@ class InsuranceCompanyData(BaseModel):
     tasa_prorroga: str = "NO ESPECIFICA"
     coberturas: dict[str, Optional[Union[int, float, str]]] = Field(default_factory=dict)
     deducibles: dict[str, Optional[str]] = Field(default_factory=dict)
+    asistencias: dict[str, Optional[str]] = Field(default_factory=dict)
     subjetividades: list[str] = Field(default_factory=list)
 
 
