@@ -102,6 +102,14 @@ async def inspect_informe_xlsx(
         )
 
 
+def _resolve_report_extension(raw_tipo: str | None) -> str:
+    """Normalize report format input ('docx'/'documento' vs 'pptx'/'diapositivas') to file extension."""
+    val = (raw_tipo or "").strip().lower()
+    if val in ("docx", "documento", "word", ".docx"):
+        return "docx"
+    return "pptx"
+
+
 async def _run_informe_job(
     job_id: str,
     file_bytes: bytes | None,
@@ -112,8 +120,9 @@ async def _run_informe_job(
     cliente_nit: str,
     terminos_busqueda: list[str],
     base_url: str,
+    formato: str = "pptx",
 ) -> None:
-    """Background worker to process the .xlsx and render the .docx management report."""
+    """Background worker to process the .xlsx and render the .pptx or .docx management report."""
     job = _informe_jobs.get(job_id)
     if not job:
         return
@@ -139,15 +148,17 @@ async def _run_informe_job(
                 f"No se encontraron solicitudes para '{cliente_nombre_corto}' en el período '{periodo}'."
             )
 
+        ext = _resolve_report_extension(formato)
         safe_client = re.sub(r"[^A-Za-z0-9_-]+", "_", report_data["cliente_nombre_corto"]).strip("_") or "CLIENTE"
         safe_period = re.sub(r"[^A-Za-z0-9_-]+", "-", report_data["periodo"]).strip("-") or "PERIODO"
-        output_filename = f"Informe_Gestion_{safe_client}_{safe_period}.pptx"
+        output_filename = f"Informe_Gestion_{safe_client}_{safe_period}.{ext}"
         output_path = Path(tempfile.gettempdir()) / f"{job_id[:8]}_{output_filename}"
 
         render_informe_gestion(
             data=report_data,
             output_path=output_path,
             assets_dir=settings.ASSETS_DIR,
+            formato=ext,
         )
 
         job.local_path = str(output_path)
@@ -169,10 +180,11 @@ async def _run_informe_job(
             "cliente": report_data["cliente_nombre_completo"],
             "periodo": report_data["periodo_titulo"],
             "fecha_corte": report_data["fecha_corte"],
+            "formato": ext,
             "kpis": report_data["kpis"],
         }
         job.status = "completed"
-        logger.info("Informe job %s completado exitosamente (%s)", job_id, download_url)
+        logger.info("Informe job %s (%s) completado exitosamente (%s)", job_id, ext, download_url)
 
     except Exception as e:
         logger.exception("Error generando informe de gestión (job %s): %s", job_id, e)
@@ -184,7 +196,7 @@ async def _run_informe_job(
     "/jobs",
     status_code=202,
     response_model=InformeJobResponse,
-    summary="Create a Management Report (.docx) generation job from an .xlsx file",
+    summary="Create a Management Report (.pptx or .docx) generation job from an .xlsx file",
 )
 async def create_informe_job(
     request: Request,
@@ -202,6 +214,14 @@ async def create_informe_job(
     terminos_busqueda: str = Form(
         "",
         description="Términos de búsqueda separados por coma para filtrar el cliente en el Excel",
+    ),
+    tipo_informe: str = Form(
+        "pptx",
+        description="Tipo de informe: 'pptx' / 'diapositivas' (PowerPoint) o 'docx' / 'documento' (Word)",
+    ),
+    formato: Optional[str] = Form(
+        None,
+        description="Alias opcional para tipo_informe ('pptx' o 'docx')",
     ),
     file: Optional[UploadFile] = File(None, description="Archivo Excel (.xlsx) exportado de Flokzu"),
     file_url: Optional[str] = Form(None, description="URL alternativa para descargar el archivo .xlsx"),
@@ -230,6 +250,7 @@ async def create_informe_job(
 
     terms_list = _parse_search_terms(terminos_busqueda)
     base_url = str(request.base_url)
+    resolved_formato = _resolve_report_extension(formato or tipo_informe)
 
     background_tasks.add_task(
         _run_informe_job,
@@ -242,6 +263,7 @@ async def create_informe_job(
         cliente_nit=cliente_nit,
         terminos_busqueda=terms_list,
         base_url=base_url,
+        formato=resolved_formato,
     )
 
     return InformeJobResponse(status="queued", job_id=job_id)
@@ -268,15 +290,22 @@ async def get_informe_job_status(job_id: str) -> InformeJobStatusResponse:
 
 @router.get(
     "/jobs/{job_id}/download",
-    summary="Download the generated Management Report (.pptx)",
+    summary="Download the generated Management Report (.pptx or .docx)",
 )
 async def download_informe_docx(job_id: str) -> FileResponse:
-    """Direct download endpoint for the generated management report .pptx."""
+    """Direct download endpoint for the generated management report (.pptx or .docx)."""
     job = _informe_jobs.get(job_id)
     if job is None or not job.local_path or not Path(job.local_path).exists():
         raise HTTPException(status_code=404, detail="El archivo del informe no está disponible.")
+    local_p = Path(job.local_path)
+    if local_p.suffix.lower() == ".docx":
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        fallback_name = f"Informe_Gestion_{job_id[:8]}.docx"
+    else:
+        media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        fallback_name = f"Informe_Gestion_{job_id[:8]}.pptx"
     return FileResponse(
         path=job.local_path,
-        filename=job.filename or f"Informe_Gestion_{job_id[:8]}.pptx",
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=job.filename or fallback_name,
+        media_type=media_type,
     )

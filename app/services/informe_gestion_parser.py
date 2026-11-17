@@ -382,7 +382,7 @@ def inspect_flokzu_xlsx(file_bytes: bytes) -> InformeInspectResponse:
     entity_periods: dict[str, Counter[str]] = defaultdict(Counter)
     entity_raw_display: dict[str, str] = {}
     for r in data_rows:
-        fi = str(r[cols["fecha_inicio"]] or "").strip()[:7]
+        fi = _normalize_date_str(r[cols["fecha_inicio"]])[:7]
         for col_key in ("entidad", "remitente"):
             raw_val = str(r[cols[col_key]] or "").strip()
             if not raw_val:
@@ -620,7 +620,7 @@ def process_flokzu_xlsx(
             if p1 or p2 or c1:
                 pending_pagare_cartera_count += 1
 
-        ff_raw = str(r[cols["fecha_fin"]] or "").strip()
+        ff_raw = _normalize_date_str(r[cols["fecha_fin"]])
         horas: int | None = None
         dias: float | None = None
         if estado_cat != "pendiente":
