@@ -141,7 +141,7 @@ async def _run_informe_job(
 
         safe_client = re.sub(r"[^A-Za-z0-9_-]+", "_", report_data["cliente_nombre_corto"]).strip("_") or "CLIENTE"
         safe_period = re.sub(r"[^A-Za-z0-9_-]+", "-", report_data["periodo"]).strip("-") or "PERIODO"
-        output_filename = f"Informe_Gestion_{safe_client}_{safe_period}.docx"
+        output_filename = f"Informe_Gestion_{safe_client}_{safe_period}.pptx"
         output_path = Path(tempfile.gettempdir()) / f"{job_id[:8]}_{output_filename}"
 
         render_informe_gestion(
@@ -153,11 +153,11 @@ async def _run_informe_job(
         job.local_path = str(output_path)
         job.filename = output_filename
 
-        # Upload to cloud storage (Supabase) if configured; fallback to direct API download URL
+        # Upload to cloud storage (GCS or Supabase) if configured; fallback to direct API download URL
         download_url: str | None = None
-        if settings.SUPABASE_URL and settings.SUPABASE_KEY:
+        if settings.GCS_BUCKET_NAME or (settings.SUPABASE_URL and settings.SUPABASE_KEY):
             try:
-                download_url = await upload_to_supabase(str(output_path))
+                download_url = await upload_to_supabase(str(output_path), folder="informes")
             except Exception as sup_err:
                 logger.warning("Fallback a descarga directa (error en almacenamiento nube): %s", sup_err)
 
@@ -268,15 +268,15 @@ async def get_informe_job_status(job_id: str) -> InformeJobStatusResponse:
 
 @router.get(
     "/jobs/{job_id}/download",
-    summary="Download the generated Management Report (.docx)",
+    summary="Download the generated Management Report (.pptx)",
 )
 async def download_informe_docx(job_id: str) -> FileResponse:
-    """Direct download endpoint for the generated management report .docx."""
+    """Direct download endpoint for the generated management report .pptx."""
     job = _informe_jobs.get(job_id)
     if job is None or not job.local_path or not Path(job.local_path).exists():
         raise HTTPException(status_code=404, detail="El archivo del informe no está disponible.")
     return FileResponse(
         path=job.local_path,
-        filename=job.filename or f"Informe_Gestion_{job_id[:8]}.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=job.filename or f"Informe_Gestion_{job_id[:8]}.pptx",
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )

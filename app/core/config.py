@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
     SUPABASE_BUCKET: str = "comparativos"
 
+    # Google Cloud Storage
+    GCS_BUCKET_NAME: str = ""
+
     # Paths
     ASSETS_DIR: Path = Path(__file__).resolve().parent.parent.parent / "assets"
     TEMPLATES_DIR: Path = Path(__file__).resolve().parent.parent.parent / "assets"
@@ -50,10 +53,8 @@ class Settings(BaseSettings):
         missing = []
         if not self.GEMINI_API_KEY:
             missing.append("GEMINI_API_KEY")
-        if not self.SUPABASE_URL:
-            missing.append("SUPABASE_URL")
-        if not self.SUPABASE_KEY:
-            missing.append("SUPABASE_KEY")
+        if not self.GCS_BUCKET_NAME and (not self.SUPABASE_URL or not self.SUPABASE_KEY):
+            missing.append("GCS_BUCKET_NAME (or SUPABASE_URL and SUPABASE_KEY)")
         if missing:
             raise ValueError(
                 f"Missing required environment variables: {', '.join(missing)}. "

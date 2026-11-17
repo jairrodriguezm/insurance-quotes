@@ -199,11 +199,41 @@ def format_decimal_es(val: float, decimals: int = 1) -> str:
     return f"{val:.{decimals}f}".replace(".", ",")
 
 
+def _normalize_date_str(val: Any) -> str:
+    """Normalize a cell value (datetime, 'YYYY-MM-DD...', 'DD/MM/YYYY...') into 'YYYY-MM-DD...'."""
+    if val is None:
+        return ""
+    if hasattr(val, "strftime"):
+        try:
+            return val.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            pass
+    s = str(val).strip()
+    if not s:
+        return ""
+    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+        return s
+    m_slash = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(.*)$", s)
+    if m_slash:
+        day, month, year, rest = m_slash.groups()
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}{rest}"
+    m_ymd = re.match(r"^(\d{4})/(\d{1,2})/(\d{1,2})(.*)$", s)
+    if m_ymd:
+        year, month, day, rest = m_ymd.groups()
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}{rest}"
+    return s
+
+
 def _load_flokzu_rows(file_bytes: bytes) -> tuple[list[Any], list[str], list[tuple[Any, ...]]]:
     """Load Flokzu Excel bytes and return (meta_row, headers, data_rows)."""
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    ws = wb.active
-    all_rows = list(ws.iter_rows(values_only=True))
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+    try:
+        ws = wb.active
+        if hasattr(ws, "reset_dimensions"):
+            ws.reset_dimensions()
+        all_rows = list(ws.iter_rows(values_only=True))
+    finally:
+        wb.close()
     if len(all_rows) < 2:
         raise ValueError("El archivo Excel no tiene el formato esperado de exportación Flokzu.")
     meta_row = list(all_rows[0])
@@ -288,7 +318,7 @@ def inspect_flokzu_xlsx(file_bytes: bytes) -> InformeInspectResponse:
 
     periodo_counts: Counter[str] = Counter()
     for r in data_rows:
-        fi = str(r[cols["fecha_inicio"]] or "").strip()
+        fi = _normalize_date_str(r[cols["fecha_inicio"]])
         if len(fi) >= 7 and re.match(r"^\d{4}-\d{2}", fi[:7]):
             periodo_counts[fi[:7]] += 1
 
@@ -330,7 +360,7 @@ def inspect_flokzu_xlsx(file_bytes: bytes) -> InformeInspectResponse:
             text_match = any(t in s_ent or t in s_rem or t in s_int for t in terms_norm)
             if flag_match or text_match:
                 total_c += 1
-                fi = str(r[cols["fecha_inicio"]] or "").strip()[:7]
+                fi = _normalize_date_str(r[cols["fecha_inicio"]])[:7]
                 if re.match(r"^\d{4}-\d{2}$", fi):
                     per_counts[fi] += 1
 
@@ -534,7 +564,7 @@ def process_flokzu_xlsx(
     pending_pagare_cartera_count = 0
 
     for r in data_rows:
-        fi_raw = str(r[cols["fecha_inicio"]] or "").strip()
+        fi_raw = _normalize_date_str(r[cols["fecha_inicio"]])
         if not fi_raw:
             continue
         if re.match(r"^\d{4}-\d{2}$", periodo_clean) and not fi_raw.startswith(periodo_clean):
