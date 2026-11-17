@@ -61,17 +61,22 @@ def _fmt_cop(valor: Any, decimales: bool = False) -> str:
 
 
 def _sombrear(celda: Any, hex_color: str) -> None:
-    """Apply background shading to a cell."""
+    """Apply background shading to a cell, replacing any prior fill."""
+    tcPr = celda._tc.get_or_add_tcPr()
+    for prev in tcPr.findall(qn("w:shd")):
+        tcPr.remove(prev)
     shd = OxmlElement("w:shd")
     shd.set(qn("w:val"), "clear")
     shd.set(qn("w:color"), "auto")
     shd.set(qn("w:fill"), hex_color)
-    celda._tc.get_or_add_tcPr().append(shd)
+    tcPr.append(shd)
 
 
 def _bordes_tabla(tabla: Any, color: str = "7F7F7F", sz: int = 4) -> None:
-    """Apply borders to a table."""
+    """Apply borders to a table, replacing any prior border definitions."""
     tblPr = tabla._tbl.tblPr
+    for prev in tblPr.findall(qn("w:tblBorders")):
+        tblPr.remove(prev)
     borders = OxmlElement("w:tblBorders")
     for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
         el = OxmlElement(f"w:{edge}")
@@ -85,15 +90,17 @@ def _bordes_tabla(tabla: Any, color: str = "7F7F7F", sz: int = 4) -> None:
 def _repetir_encabezado(fila: Any) -> None:
     """Mark a table row to repeat as header on page breaks."""
     trPr = fila._tr.get_or_add_trPr()
-    el = OxmlElement("w:tblHeader")
-    el.set(qn("w:val"), "true")
-    trPr.append(el)
+    if not trPr.findall(qn("w:tblHeader")):
+        el = OxmlElement("w:tblHeader")
+        el.set(qn("w:val"), "true")
+        trPr.append(el)
 
 
 def _no_partir(fila: Any) -> None:
     """Prevent a table row from splitting across pages."""
     trPr = fila._tr.get_or_add_trPr()
-    trPr.append(OxmlElement("w:cantSplit"))
+    if not trPr.findall(qn("w:cantSplit")):
+        trPr.append(OxmlElement("w:cantSplit"))
 
 
 def _texto(
@@ -191,6 +198,8 @@ def _resolver_ruta_logo(
         "axa_colpatria": "axa_colpatria.png",
         "axa colpatria": "axa_colpatria.png",
         "colpatria": "axa_colpatria.png",
+        "mapfre": "mapfre.png",
+        "allianz": "allianz.png",
         "hdi": "hdi.png",
         "zurich": "zurich.png",
         "sura": "sura.png",
@@ -250,11 +259,17 @@ def _logo_en_celda(
     ancho_in: float = 1.25,
     pie: str | None = None,
     texto_alternativo: str | None = None,
+    *,
+    fuente: str = FUENTE,
+    tam_pie: float = 8.0,
+    color_alt: RGBColor | None = None,
 ) -> None:
     """Insert a logo image into a table cell, falling back to text if missing."""
     celda.text = ""
     p = celda.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(2)
+    p.paragraph_format.space_after = Pt(2)
     imagen_cargada = False
 
     if ruta and not os.path.exists(ruta):
@@ -286,15 +301,17 @@ def _logo_en_celda(
         r = p.add_run(fallback_text)
         r.bold = True
         r.font.size = Pt(10)
-        r.font.name = FUENTE
-        r.font.color.rgb = AZUL
+        r.font.name = fuente
+        r.font.color.rgb = color_alt if color_alt is not None else AZUL
     if pie:
         p2 = celda.add_paragraph()
         p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p2.paragraph_format.space_before = Pt(1)
+        p2.paragraph_format.space_after = Pt(2)
         r = p2.add_run(pie)
         r.bold = True
-        r.font.size = Pt(8)
-        r.font.name = FUENTE
+        r.font.size = Pt(tam_pie)
+        r.font.name = fuente
     celda.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
 
@@ -795,6 +812,28 @@ def _render_autos(doc: Document, data: dict, assets: str) -> None:
                 _texto(row.cells[i + 1], val_limpio, tam=8)
 
 
+FUENTE_COPROP = "Century Gothic"
+AZUL_COPROP = RGBColor(0x00, 0x20, 0x60)
+BLANCO_RGB = RGBColor(0xFF, 0xFF, 0xFF)
+AZUL_COPROP_HEX = "002060"
+BANDA_RECOMENDACION_HEX = "D9E2F3"
+BANDA_SUBMODULO_HEX = "DBE5F1"
+
+
+def _extraer_demas_eventos(ded_text: str) -> str:
+    """Extract clause B ('Demás eventos') when a deductible string includes literal A for fire."""
+    if not ded_text:
+        return ded_text
+    m = re.search(
+        r"\bB[\)\.\-]\s*(?:Dem[aá]s\s+eventos\s*:?\s*)?(.+)$",
+        str(ded_text).strip(),
+        flags=re.IGNORECASE,
+    )
+    if m:
+        return m.group(1).strip()
+    return str(ded_text).strip()
+
+
 def _obtener_cobertura_copropiedades(ase: dict, current_section: str, concepto_label: str, meta: dict) -> str:
     """Retrieve and format a specific coverage for an insurer in Copropiedades category."""
     cobs = ase.get("coberturas", {}) or {}
@@ -804,24 +843,23 @@ def _obtener_cobertura_copropiedades(ase: dict, current_section: str, concepto_l
     val = None
     if "incendio" in sec:
         if "incendio" in lbl or "extended" in lbl or "terremoto" in lbl:
-            val = cobs.get("incendio_rayo_explosion_agua") or cobs.get("todo_riesgo_incendio") or cobs.get("edificio") or meta.get("valor_edificio") or meta.get("valor_asegurado")
+            val = (
+                cobs.get("incendio_rayo_explosion_agua")
+                or cobs.get("todo_riesgo_incendio")
+                or cobs.get("danos_materiales")
+                or meta.get("valor_asegurado")
+                or cobs.get("edificio")
+                or meta.get("valor_edificio")
+            )
         elif "vidrio" in lbl:
             val = cobs.get("rotura_vidrios")
         elif "cuota" in lbl:
             val = cobs.get("cuotas_administracion") or cobs.get("perdida_ingresos_cuotas") or "N/A"
         elif "escombro" in lbl:
             val = cobs.get("remocion_escombros")
-        elif "intemperie" in lbl:
-            val = cobs.get("bienes_intemperie") or "N/A"
-        elif "autoridad" in lbl:
-            val = cobs.get("actos_autoridad") or "N/A"
-        elif "abogado" in lbl or "honorarios" in lbl:
-            val = cobs.get("honorarios_abogados") or cobs.get("honorarios_profesionales")
-        elif "indice" in lbl or "índice" in lbl:
-            val = cobs.get("indice_variable") or "0%"
     elif "maquinaria" in sec:
         if "rotura" in lbl or "dano interno" in lbl:
-            val = cobs.get("rotura_maquinaria") or meta.get("valor_maquinaria")
+            val = cobs.get("rotura_maquinaria") if cobs.get("rotura_maquinaria") not in (None, "") else meta.get("valor_maquinaria")
         elif "con violencia" in lbl:
             val = cobs.get("sustraccion_violencia") or cobs.get("sustraccion_maquinaria") or meta.get("valor_maquinaria")
         elif "sin violencia" in lbl:
@@ -836,17 +874,19 @@ def _obtener_cobertura_copropiedades(ase: dict, current_section: str, concepto_l
         elif "portatil" in lbl or "movil" in lbl:
             val = cobs.get("equipos_portatiles") or meta.get("valor_equipos_moviles")
     elif "manejo" in sec:
-        val = cobs.get("manejo") or cobs.get("manejo_fraude") or cobs.get("manejo_global_comercial") or meta.get("valor_manejo")
+        val = cobs.get("manejo") or cobs.get("manejo_fraude") or cobs.get("manejo_global_comercial")
+        if val in (None, "") and isinstance(meta.get("valor_manejo"), (int, float)):
+            val = meta.get("valor_manejo")
     elif "mueble" in sec:
         if "rotura" in lbl or "dano interno" in lbl:
-            val = cobs.get("muebles_dano_interno") or meta.get("valor_muebles")
+            val = cobs.get("muebles_dano_interno") if cobs.get("muebles_dano_interno") not in (None, "") else meta.get("valor_muebles")
         elif "con violencia" in lbl:
-            val = cobs.get("muebles_sustraccion") or meta.get("valor_muebles")
+            val = cobs.get("muebles_sustraccion") if cobs.get("muebles_sustraccion") not in (None, "") else meta.get("valor_muebles")
         elif "sin violencia" in lbl:
             val = cobs.get("muebles_sustraccion_sin_violencia") or cobs.get("sustraccion_sin_violencia") or "N/A"
     elif "directores" in sec or "d&o" in sec or "administradores" in sec:
         if "basico" in lbl or "directores" in lbl:
-            val = cobs.get("dno_directores") or meta.get("valor_dno")
+            val = cobs.get("dno_directores") or cobs.get("directores_administradores") or meta.get("valor_dno")
         elif "sublimite" in lbl or "copropiedad" in lbl:
             val = cobs.get("dno_sublimite_copropiedad") or "Sin sublímite"
     elif "rce" in sec:
@@ -855,15 +895,15 @@ def _obtener_cobertura_copropiedades(ase: dict, current_section: str, concepto_l
         elif "patronal" in lbl:
             val = cobs.get("rce_patronal")
         elif "contratista" in lbl:
-            val = cobs.get("rce_contratistas") or "N/A"
+            val = cobs.get("rce_contratistas")
         elif "cruzada" in lbl:
             val = cobs.get("rce_cruzada")
         elif "medico" in lbl:
             val = cobs.get("rce_gastos_medicos") or cobs.get("gastos_medicos")
-        elif "propietario" in lbl or "arrendatario" in lbl or "poseedor" in lbl:
-            val = cobs.get("rce_arrendatarios") or "N/A"
         elif "parqueadero" in lbl:
             val = cobs.get("rce_parqueaderos")
+        elif "vehiculo" in lbl:
+            val = cobs.get("rce_vehiculos") or "N/A"
 
     if val is None or str(val).strip().upper() in ("", "NONE"):
         val = _buscar_valor_concepto(cobs, concepto_label, "Copropiedades")
@@ -887,9 +927,17 @@ def _obtener_deducible_copropiedades(ase: dict, current_section: str, concepto_l
         if "incendio" in lbl and "agua" not in lbl:
             val = deds.get("ded_incendio") or deds.get("incendio")
         elif "agua" in lbl or "explosion" in lbl or "anegacion" in lbl or "extended" in lbl:
-            val = deds.get("ded_explosion_agua") or deds.get("ded_agua") or deds.get("ded_incendio")
+            val = deds.get("ded_explosion_agua") or deds.get("ded_agua")
+            if not val and deds.get("ded_incendio"):
+                val = _extraer_demas_eventos(str(deds.get("ded_incendio")))
+            elif val:
+                val = _extraer_demas_eventos(str(val))
         elif "hmacc" in lbl or "amit" in lbl:
-            val = deds.get("ded_hmacc_amit") or deds.get("ded_hmacc") or deds.get("ded_amit") or deds.get("ded_incendio")
+            val = deds.get("ded_hmacc_amit") or deds.get("ded_hmacc") or deds.get("ded_amit")
+            if not val and deds.get("ded_incendio"):
+                val = _extraer_demas_eventos(str(deds.get("ded_incendio")))
+            elif val:
+                val = _extraer_demas_eventos(str(val))
         elif "terremoto" in lbl:
             val = deds.get("ded_terremoto") or deds.get("terremoto")
     elif "maquinaria" in sec:
@@ -919,14 +967,21 @@ def _obtener_deducible_copropiedades(ase: dict, current_section: str, concepto_l
             return "SIN DEDUCIBLE"
         val = "NO ESPECIFICA"
 
+    if str(val).strip().upper() == "N/A":
+        return "N/A"
+
     return _limpiar_texto_deducible(str(val), ramo=concepto_label, categoria="Copropiedades")
 
 
 def _obtener_asistencia_copropiedades(ase: dict, current_section: str, concepto_label: str) -> str:
-    """Retrieve and format an assistance coverage limit for Copropiedades."""
+    """Retrieve and format an assistance coverage limit for Copropiedades without cross-section leakage."""
     asists = ase.get("asistencias", {}) or {}
     if not asists and isinstance(ase.get("coberturas"), dict):
-        raw_as = ase.get("coberturas", {}).get("asistencias") or ase.get("coberturas", {}).get("asistencias_comunes") or {}
+        raw_as = (
+            ase.get("coberturas", {}).get("asistencias")
+            or ase.get("coberturas", {}).get("asistencias_comunes")
+            or {}
+        )
         if isinstance(raw_as, dict):
             asists = raw_as
         elif isinstance(raw_as, str):
@@ -935,29 +990,30 @@ def _obtener_asistencia_copropiedades(ase: dict, current_section: str, concepto_
     lbl = unicodedata.normalize("NFKD", concepto_label).encode("ascii", "ignore").decode("ascii").lower()
     sec = unicodedata.normalize("NFKD", current_section).encode("ascii", "ignore").decode("ascii").lower()
 
-    for k, v in asists.items():
-        norm_k = unicodedata.normalize("NFKD", k).encode("ascii", "ignore").decode("ascii").lower()
-        if (norm_k in lbl or lbl in norm_k) and v and str(v).strip().upper() not in ("NONE", "NO ESPECIFICA"):
-            return str(v)
-
     val = None
     if "comunes" in sec:
         if any(k in lbl for k in ("cerrajero", "cerrajeria")):
-            val = asists.get("cerrajero_comunes") or asists.get("cerrajeria_comunes") or asists.get("cerrajero")
+            val = asists.get("cerrajero_comunes") or asists.get("cerrajeria_comunes")
         elif any(k in lbl for k in ("vidriero", "vidrieria")):
-            val = asists.get("vidriero_comunes") or asists.get("vidrieria_comunes") or asists.get("vidriero")
+            val = asists.get("vidriero_comunes") or asists.get("vidrieria_comunes")
         elif any(k in lbl for k in ("electricista", "electricidad")):
-            val = asists.get("electricista_comunes") or asists.get("electricidad_comunes") or asists.get("electricista")
+            val = asists.get("electricista_comunes") or asists.get("electricidad_comunes")
         elif any(k in lbl for k in ("plomero", "plomeria")):
-            val = asists.get("plomero_comunes") or asists.get("plomeria_comunes") or asists.get("plomero")
+            val = asists.get("plomero_comunes") or asists.get("plomeria_comunes")
         elif "traslado" in lbl:
             val = asists.get("traslado_bienes_comunes") or asists.get("traslado_bienes") or asists.get("gastos_traslado")
         elif "celador" in lbl or "vigilancia" in lbl:
-            val = asists.get("celador_sustituto") or asists.get("vigilancia_comunes") or asists.get("vigilancia")
+            val = asists.get("celador_sustituto") or asists.get("vigilancia_comunes")
+        elif "vecina" in lbl or "terceros derivados" in lbl:
+            val = asists.get("reparacion_propiedades_vecinas") or asists.get("propiedades_vecinas")
+        elif "escombro" in lbl:
+            val = asists.get("remocion_escombros_asistencia") or asists.get("remocion_escombros")
         elif "jardiner" in lbl:
             val = asists.get("jardineria") or asists.get("gastos_jardineria")
+        elif "antena" in lbl:
+            val = asists.get("reparacion_antena_colectiva") or asists.get("antena_colectiva")
         elif "auxiliar" in lbl or "aseo" in lbl or "servicios generales" in lbl:
-            val = asists.get("auxiliar_servicios_generales") or asists.get("aseo_comunes") or asists.get("limpieza")
+            val = asists.get("auxiliar_servicios_generales") or asists.get("aseo_comunes")
         else:
             val = asists.get("comunes_general")
     elif "juridica" in sec or "legal" in sec:
@@ -971,42 +1027,178 @@ def _obtener_asistencia_copropiedades(ase: dict, current_section: str, concepto_
             val = asists.get("juridica_general")
     elif "privadas" in sec:
         if any(k in lbl for k in ("cerrajero", "cerrajeria")):
-            val = asists.get("cerrajero_privadas") or asists.get("cerrajeria_privadas") or asists.get("cerrajero")
+            val = asists.get("cerrajero_privadas") or asists.get("cerrajeria_privadas")
         elif any(k in lbl for k in ("plomero", "plomeria")):
-            val = asists.get("plomero_privadas") or asists.get("plomeria_privadas") or asists.get("plomero")
+            val = asists.get("plomero_privadas") or asists.get("plomeria_privadas")
         elif any(k in lbl for k in ("electricista", "electricidad")):
-            val = asists.get("electricista_privadas") or asists.get("electricidad_privadas") or asists.get("electricista")
+            val = asists.get("electricista_privadas") or asists.get("electricidad_privadas")
         elif any(k in lbl for k in ("vidriero", "vidrieria")):
-            val = asists.get("vidriero_privadas") or asists.get("vidrieria_privadas") or asists.get("vidriero")
+            val = asists.get("vidriero_privadas") or asists.get("vidrieria_privadas")
         elif "filtraci" in lbl or "humedad" in lbl:
             val = asists.get("reparacion_filtraciones") or asists.get("filtraciones_humedades")
         elif "telefonico" in lbl or "complementario" in lbl:
             val = asists.get("complementarios_telefonicos") or asists.get("asistencia_telefonica")
         elif "referencia" in lbl or "coordinaci" in lbl:
             val = asists.get("referencias_coordinacion") or asists.get("coordinacion_privada")
-        else:
+        if not val:
             val = asists.get("privadas_general")
 
+    # Exact-label fallback in asists (without cross-section cerrajero/plomero collisions)
+    if not val:
+        norm_lbl = normalize_str(concepto_label)
+        for k, v in asists.items():
+            if normalize_str(k) == norm_lbl and v and str(v).strip().upper() not in ("NONE", "NO ESPECIFICA"):
+                val = v
+                break
+
     if val and str(val).strip().upper() not in ("NONE", "NO ESPECIFICA"):
-        return str(val)
+        return str(val).strip()
 
-    has_asistencia = (
-        ase.get("asistencia_incluida")
-        or asists
-        or (isinstance(ase.get("coberturas"), dict) and "asistencia" in str(ase.get("coberturas")).lower())
-        or any("asistencia" in str(op.get("modalidad", "")).lower() for op in ase.get("opciones", []))
-    )
-
-    if not has_asistencia:
+    if not asists and not ase.get("asistencia_incluida"):
         return "No contratado"
 
-    if "juridica" in sec:
-        return "Sin límite"
-    return "Incluido"
+    return "No aplica"
+
+
+def _render_modalidad_copropiedades(celda: Any, op: dict, ase: dict, idx_op: int) -> None:
+    """Render MODALIDAD DE ASEGURAMIENTO cell in Section III matching Multiriesgos Copropiedades standard."""
+    mod_raw = str(op.get("modalidad") or "").strip()
+    deds = ase.get("deducibles", {}) or {}
+    ded_tr_raw = str(deds.get("ded_terremoto") or deds.get("Terremoto") or deds.get("terremoto") or "").strip()
+
+    # Slice option-specific earthquake deductible if separated by '/'
+    slice_tr = ded_tr_raw
+    if "/" in ded_tr_raw:
+        parts = [p.strip() for p in ded_tr_raw.split("/") if p.strip()]
+        if idx_op < len(parts):
+            slice_tr = parts[idx_op]
+
+    mod_norm = normalize_str(mod_raw)
+    tr_norm = normalize_str(slice_tr)
+
+    base_label: str | None = None
+    if "valor de la perdida" in mod_norm or ("perdida" in mod_norm and "asegurable" not in mod_norm):
+        base_label = "Valor de la Pérdida"
+    elif "valor asegurable" in mod_norm or "suma asegurada" in mod_norm or "able" in mod_norm.split():
+        base_label = "Valor Asegurable"
+    elif "perdida" in tr_norm and "asegurable" not in tr_norm:
+        base_label = "Valor de la Pérdida"
+    elif "asegurable" in tr_norm or "suma asegurada" in tr_norm or "able" in tr_norm.split():
+        base_label = "Valor Asegurable"
+
+    celda.text = ""
+    celda.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+    if base_label:
+        p1 = celda.paragraphs[0]
+        p1.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p1.paragraph_format.space_before = Pt(2)
+        p1.paragraph_format.space_after = Pt(0)
+        r1 = p1.add_run("Deducible terremoto sobre")
+        r1.font.name = FUENTE_COPROP
+        r1.font.size = Pt(11)
+        r1.bold = False
+
+        p2 = celda.add_paragraph()
+        p2.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p2.paragraph_format.space_before = Pt(0)
+        p2.paragraph_format.space_after = Pt(2)
+        r2 = p2.add_run(base_label)
+        r2.font.name = FUENTE_COPROP
+        r2.font.size = Pt(11)
+        r2.bold = True
+        return
+
+    clean_lines = [
+        line.strip()
+        for line in mod_raw.split("\n")
+        if line.strip()
+        and not any(w in line.lower() for w in ("prima neta", "gastos de", "total a pagar", "iva ("))
+    ]
+    texto_mod = "\n".join(clean_lines) if clean_lines else RELLENO
+    _texto(celda, texto_mod, tam=10, centrado=False, fuente=FUENTE_COPROP)
+
+
+def _preparar_tabla_matriz_copropiedades(
+    tabla: Any,
+    aseguradoras: list[dict],
+    assets: str,
+) -> tuple[float, float]:
+    """Configure columns, navy headers, logos, and borders for Copropiedades matrix tables (V, VI, VII)."""
+    n_ase = len(aseguradoras)
+    col0_in = 1.40
+    ins_col_in = round(5.50 / max(n_ase, 1), 2)
+    _ajustar_columnas(tabla, 1 + n_ase, col_width=Inches(ins_col_in))
+    _bordes_tabla(tabla, color="000000", sz=4)
+
+    hdr_row = tabla.rows[0]
+    _repetir_encabezado(hdr_row)
+    _no_partir(hdr_row)
+
+    hdr_title = hdr_row.cells[0].text.strip() or "Cobertura"
+    _sombrear(hdr_row.cells[0], AZUL_COPROP_HEX)
+    _texto(
+        hdr_row.cells[0],
+        hdr_title,
+        negrita=True,
+        tam=11,
+        color=BLANCO_RGB,
+        centrado=("asistencia" not in hdr_title.lower()),
+        fuente=FUENTE_COPROP,
+    )
+    hdr_row.cells[0].width = Inches(col0_in)
+
+    logo_w = min(1.15, round(ins_col_in * 0.84, 2))
+    for i, ase in enumerate(aseguradoras):
+        col = i + 1
+        cell_hdr = hdr_row.cells[col]
+        _sombrear(cell_hdr, AZUL_COPROP_HEX)
+        cell_hdr.width = Inches(ins_col_in)
+        logo_path = _resolver_ruta_logo(
+            assets,
+            ase.get("logo", ""),
+            id_ase=ase.get("id", ""),
+            nombre=ase.get("nombre", ""),
+        )
+        _logo_en_celda(
+            cell_hdr,
+            logo_path,
+            ancho_in=logo_w,
+            texto_alternativo=_nombre_corto(ase),
+            fuente=FUENTE_COPROP,
+            color_alt=BLANCO_RGB,
+        )
+
+    tam_datos = 10.5 if n_ase <= 4 else 9.0
+    return col0_in, tam_datos
+
+
+def _estilizar_banda_submodulo(fila: Any, titulo: str) -> None:
+    """Merge a section/module band row across all columns and style with corporate light blue."""
+    if len(fila.cells) > 1:
+        fila.cells[0].merge(fila.cells[-1])
+    _sombrear(fila.cells[0], BANDA_SUBMODULO_HEX)
+    _texto(
+        fila.cells[0],
+        titulo,
+        negrita=True,
+        tam=11,
+        centrado=True,
+        fuente=FUENTE_COPROP,
+    )
+    _no_partir(fila)
+
+
+def _es_valor_valido_meta(val: Any) -> bool:
+    """Check whether a metadata string field carries real information."""
+    if val is None:
+        return False
+    s = str(val).strip()
+    return bool(s) and s.upper() not in {"NO ESPECIFICA", "N/A", "NONE", "NULL"}
 
 
 def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
-    """Populate the Copropiedades.docx layout template."""
+    """Populate the Copropiedades.docx layout template matching official Multiriesgos slip."""
     meta = data.get("meta", {})
     aseguradoras = data.get("aseguradoras", [])
     rec = data.get("recomendacion") or {}
@@ -1015,88 +1207,115 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
     # 1. Table 0: General Info (6 rows x 2 cols)
     if len(doc.tables) > 0:
         t0 = doc.tables[0]
-        t0.rows[0].cells[1].text = str(meta.get("fecha", ""))
-        t0.rows[1].cells[1].text = str(meta.get("tipo_cobertura", "COPROPIEDADES")).upper()
-        t0.rows[2].cells[1].text = str(meta.get("tomador", ""))
-        t0.rows[3].cells[1].text = str(meta.get("asegurado", ""))
-        t0.rows[4].cells[1].text = str(meta.get("beneficiario", "Terceros afectados / Copropietarios / Acreedores hipotecarios"))
+        _bordes_tabla(t0, color="000000", sz=4)
+        campos_t0 = [
+            str(meta.get("fecha", "")),
+            str(meta.get("tipo_cobertura") or "MULTIRRIESGO COPROPIEDADES").upper(),
+            str(meta.get("tomador", "")),
+            str(meta.get("asegurado", "")),
+            str(meta.get("beneficiario") or "Copropietarios / Terceros Afectados"),
+        ]
+        for idx_r, val_txt in enumerate(campos_t0):
+            lbl_txt = t0.rows[idx_r].cells[0].text.strip()
+            _texto(t0.rows[idx_r].cells[0], lbl_txt, negrita=True, tam=11, centrado=False, fuente=FUENTE_COPROP)
+            _texto(t0.rows[idx_r].cells[1], val_txt, negrita=False, tam=11, centrado=False, fuente=FUENTE_COPROP)
+            t0.rows[idx_r].cells[0].width = Inches(1.65)
+            t0.rows[idx_r].cells[1].width = Inches(5.25)
 
-        # Row 5: INF. COPROPIEDAD (Clean structured bullets)
+        # Row 5: INF. COPROPIEDAD (Clean structured bullets, excluding NO ESPECIFICA)
+        lbl_inf = t0.rows[5].cells[0].text.strip()
+        _texto(t0.rows[5].cells[0], lbl_inf, negrita=True, tam=11, centrado=False, fuente=FUENTE_COPROP)
+        t0.rows[5].cells[0].width = Inches(1.65)
         celda_inf = t0.rows[5].cells[1]
+        celda_inf.width = Inches(5.25)
         celda_inf.text = ""
+        celda_inf.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
         bullets: list[str] = []
-        if meta.get("direccion"):
+        if _es_valor_valido_meta(meta.get("direccion")):
             bullets.append(f"Dirección: {meta.get('direccion')}")
-        if meta.get("ciudad"):
+        if _es_valor_valido_meta(meta.get("ciudad")):
             bullets.append(f"Ciudad: {meta.get('ciudad')}")
-        if meta.get("ano_construccion"):
+        if _es_valor_valido_meta(meta.get("ano_construccion")):
             bullets.append(f"Año de construcción: {meta.get('ano_construccion')}")
-        if meta.get("numero_torres"):
+        if _es_valor_valido_meta(meta.get("numero_torres")):
             bullets.append(f"Número de torres: {meta.get('numero_torres')}")
-        if meta.get("numero_apartamentos") or meta.get("numero_unidades"):
-            bullets.append(f"Número de apartamentos / unidades: {meta.get('numero_apartamentos') or meta.get('numero_unidades')}")
-        if meta.get("numero_pisos"):
+        num_apts = meta.get("numero_apartamentos") or meta.get("numero_unidades")
+        if _es_valor_valido_meta(num_apts):
+            bullets.append(f"Número de apartamentos / unidades: {num_apts}")
+        if _es_valor_valido_meta(meta.get("numero_pisos")):
             bullets.append(f"Número de pisos: {meta.get('numero_pisos')}")
-        if meta.get("uso") or meta.get("giro"):
-            bullets.append(f"Uso o giro: {meta.get('uso') or meta.get('giro')}")
-        if meta.get("tipo_construccion"):
+        uso_val = meta.get("uso") or meta.get("giro")
+        if _es_valor_valido_meta(uso_val):
+            bullets.append(f"Uso o giro: {uso_val}")
+        if _es_valor_valido_meta(meta.get("tipo_construccion")):
             bullets.append(f"Tipo de construcción: {meta.get('tipo_construccion')}")
 
         raw_inf = meta.get("inf_copropiedad") or ""
-        if not bullets and raw_inf:
+        if not bullets and _es_valor_valido_meta(raw_inf):
             if isinstance(raw_inf, list):
-                bullets = [str(x) for x in raw_inf]
+                bullets = [str(x) for x in raw_inf if _es_valor_valido_meta(x)]
             elif "\n" in str(raw_inf) or "•" in str(raw_inf):
                 for line in str(raw_inf).split("\n"):
                     clean_l = line.strip().lstrip("•- \t")
-                    if clean_l:
+                    if _es_valor_valido_meta(clean_l):
                         bullets.append(clean_l)
             else:
                 bullets = [str(raw_inf)]
 
-        if not bullets and meta.get("ubicacion"):
+        if not bullets and _es_valor_valido_meta(meta.get("ubicacion")):
             bullets = [str(meta.get("ubicacion"))]
 
         for i, b in enumerate(bullets):
             p = celda_inf.paragraphs[0] if i == 0 else celda_inf.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_before = Pt(1)
             p.paragraph_format.space_after = Pt(2)
             bullet_text = b if b.startswith("•") else f"•  {b}"
             r = p.add_run(bullet_text)
-            r.font.name = FUENTE
-            r.font.size = Pt(8.5)
+            r.font.name = FUENTE_COPROP
+            r.font.size = Pt(11)
 
     # 2. Table 1: Valores Asegurados (10 rows x 2 cols)
     if len(doc.tables) > 1:
         t1 = doc.tables[1]
+        _bordes_tabla(t1, color="000000", sz=4)
+        for ci, hdr_txt in enumerate(["ITEM", "VALOR"]):
+            _sombrear(t1.rows[0].cells[ci], AZUL_COPROP_HEX)
+            _texto(t1.rows[0].cells[ci], hdr_txt, negrita=True, tam=11, color=BLANCO_RGB, centrado=True, fuente=FUENTE_COPROP)
 
         v_edif = meta.get("valor_edificio")
         v_cim = meta.get("valor_cimentacion")
         v_total = meta.get("valor_asegurado")
+        edif_display = v_edif if v_edif not in (None, "", RELLENO, "NO ESPECIFICA") else v_total
 
-        edif_display = v_edif or v_total
-        if isinstance(v_edif, (int, float)) and isinstance(v_cim, (int, float)):
-            if v_total and isinstance(v_total, (int, float)) and v_total > v_edif:
-                edif_display = v_total
-            elif v_edif + v_cim > v_edif:
-                edif_display = v_edif + v_cim
+        # Extract numeric Manejo values across insurers to resolve reference/mode value
+        manejo_num_vals: list[float] = []
+        for a in aseguradoras:
+            raw_m = (a.get("coberturas", {}) or {}).get("manejo") or (a.get("coberturas", {}) or {}).get("manejo_fraude")
+            if isinstance(raw_m, (int, float)) and raw_m > 0:
+                manejo_num_vals.append(float(raw_m))
+            elif isinstance(raw_m, str):
+                digits = re.sub(r"[^\d]", "", raw_m)
+                if digits:
+                    manejo_num_vals.append(float(digits))
 
         for row in t1.rows[1:]:
             etq_raw = row.cells[0].text.strip()
             etq = unicodedata.normalize("NFKD", etq_raw).encode("ascii", "ignore").decode("ascii").upper()
-            val = RELLENO
+            val: Any = RELLENO
 
             if "EDIFICIO" in etq:
                 val = edif_display
             elif "CIMENTACI" in etq:
-                if meta.get("cimentacion_incluida") or (v_cim and edif_display and v_cim < edif_display):
-                    val = "(incluida en ítem anterior)"
-                elif v_cim:
+                if isinstance(v_cim, str) and _es_valor_valido_meta(v_cim):
                     val = v_cim
-                else:
+                elif meta.get("cimentacion_incluida") or not v_cim:
                     val = "(incluida en ítem anterior)"
+                elif isinstance(v_cim, (int, float)) and isinstance(edif_display, (int, float)) and v_cim < edif_display:
+                    val = "(incluida en ítem anterior)"
+                else:
+                    val = v_cim
             elif "MAQUINARIA" in etq:
                 val = meta.get("valor_maquinaria")
             elif "MUEBLE" in etq:
@@ -1105,6 +1324,8 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                 val = meta.get("valor_equipos")
             elif "PORTATIL" in etq or "MOVIL" in etq:
                 val = meta.get("valor_equipos_moviles")
+                if val in (None, "", RELLENO) and meta.get("valor_equipos"):
+                    val = meta.get("valor_equipos")
             elif "RCE" in etq:
                 val = meta.get("valor_rce")
                 if val in (None, "", RELLENO) and aseguradoras:
@@ -1112,15 +1333,25 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                     val = cobs0.get("rce_basico") or cobs0.get("rce") or cobs0.get("responsabilidad_civil")
             elif "D&O" in etq or "DIRECTOR" in etq:
                 val = meta.get("valor_dno")
+                if val in (None, "", RELLENO) and aseguradoras:
+                    cobs0 = aseguradoras[0].get("coberturas", {}) or {}
+                    val = cobs0.get("dno_directores")
             elif "MANEJO" in etq:
-                val = meta.get("valor_manejo")
-                if not val or val in (None, "", RELLENO, "NO ESPECIFICA"):
+                vm = meta.get("valor_manejo")
+                if isinstance(vm, (int, float)) and vm > 0:
+                    val = vm
+                elif manejo_num_vals:
+                    # Use most frequent (mode), breaking ties with the highest reference limit
+                    val = max(set(manejo_num_vals), key=lambda x: (manejo_num_vals.count(x), x))
+                elif vm and str(vm).strip() not in ("", RELLENO, "NO ESPECIFICA"):
+                    val = vm
+                else:
                     val = "Según cada cotización"
 
             if val in (None, "", RELLENO) and aseguradoras:
                 val = _buscar_valor_concepto(
                     aseguradoras[0].get("coberturas", {}),
-                    row.cells[0].text.strip(),
+                    etq_raw,
                     "Copropiedades",
                 )
 
@@ -1128,14 +1359,28 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                 texto_val = _fmt_cop(val, decimales=False)
             else:
                 texto_val = str(val or RELLENO)
-            _texto(row.cells[1], texto_val, tam=9, centrado=False)
+            _texto(row.cells[0], etq_raw, negrita=False, tam=11, centrado=False, fuente=FUENTE_COPROP)
+            _texto(row.cells[1], texto_val, negrita=False, tam=11, centrado=True, fuente=FUENTE_COPROP)
+            row.cells[0].width = Inches(3.45)
+            row.cells[1].width = Inches(3.45)
+            _no_partir(row)
 
-    # 3. Table 2: Quotes Table (COMPAÑÍA, PRIMA, MODALIDAD)
+    # 3. Table 2: Quotes Table (COMPAÑÍA DE SEGUROS, PRIMA, MODALIDAD DE ASEGURAMIENTO)
     if len(doc.tables) > 2 and n_ase > 0:
         t2 = doc.tables[2]
+        _bordes_tabla(t2, color="000000", sz=4)
         while len(t2.rows) > 1:
             tr = t2.rows[-1]._tr
             t2._tbl.remove(tr)
+
+        widths_t2 = [Inches(2.2), Inches(2.1), Inches(2.6)]
+        hdr_t2 = ["COMPAÑÍA DE SEGUROS", "PRIMA", "MODALIDAD DE\nASEGURAMIENTO"]
+        _repetir_encabezado(t2.rows[0])
+        _no_partir(t2.rows[0])
+        for ci, htxt in enumerate(hdr_t2):
+            _sombrear(t2.rows[0].cells[ci], AZUL_COPROP_HEX)
+            _texto(t2.rows[0].cells[ci], htxt, negrita=True, tam=11, color=BLANCO_RGB, centrado=True, fuente=FUENTE_COPROP)
+            t2.rows[0].cells[ci].width = widths_t2[ci]
 
         for ase in aseguradoras:
             opciones = ase.get("opciones", [])
@@ -1143,6 +1388,9 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                 opciones = [{"etiqueta": "", "prima": _obtener_prima_total(ase), "modalidad": RELLENO}]
             for i_op, op in enumerate(opciones):
                 fila = t2.add_row()
+                for ci, w_col in enumerate(widths_t2):
+                    fila.cells[ci].width = w_col
+
                 logo_path = _resolver_ruta_logo(
                     assets,
                     op.get("logo") or ase.get("logo", ""),
@@ -1155,135 +1403,142 @@ def _render_copropiedades(doc: Document, data: dict, assets: str) -> None:
                 _logo_en_celda(
                     fila.cells[0],
                     logo_path,
-                    ancho_in=1.1,
+                    ancho_in=1.2,
                     pie=pie_opt,
                     texto_alternativo=_nombre_corto(ase),
+                    fuente=FUENTE_COPROP,
+                    tam_pie=11.0,
+                    color_alt=AZUL_COPROP,
                 )
 
                 prima_num = _obtener_prima_total(op)
                 prima_txt = f"{_fmt_cop(prima_num, decimales=False)}\nINCLUIDO IVA"
-                _texto(fila.cells[1], prima_txt, tam=9, negrita=True)
+                _texto(fila.cells[1], prima_txt, tam=11, negrita=True, centrado=True, fuente=FUENTE_COPROP)
 
-                modalidad_raw = op.get("modalidad", "") or ""
-                mod_lines = []
-                if "deducible" in modalidad_raw.lower() or "perdida" in modalidad_raw.lower() or "amparo" in modalidad_raw.lower():
-                    mod_lines = [
-                        line.strip()
-                        for line in modalidad_raw.split("\n")
-                        if line.strip() and not any(w in line.lower() for w in ("prima neta", "gastos de", "total a pagar", "iva ("))
-                    ]
-                if not mod_lines:
-                    deds = ase.get("deducibles", {}) or {}
-                    d_inc = deds.get("ded_incendio") or "5% amparo básico"
-                    d_tr = deds.get("ded_terremoto") or "3% Terremoto"
-                    clean_inc = re.sub(r"^(\d+%).*", r"\1 amparo básico", str(d_inc).strip())
-                    clean_tr = re.sub(r"^(\d+%).*", r"\1 Terremoto", str(d_tr).strip())
-                    mod_lines = [
-                        "Deducible valor de la pérdida:",
-                        f"• {clean_inc}",
-                        f"• {clean_tr}",
-                    ]
-                _texto(fila.cells[2], "\n".join(mod_lines), tam=8.5, centrado=False)
+                _render_modalidad_copropiedades(fila.cells[2], op, ase, i_op)
                 _no_partir(fila)
 
     # 4. Table 3: Recommendation (1 row x 2 cols)
     if len(doc.tables) > 3 and rec:
         t3 = doc.tables[3]
-        elegida = next((a for a in aseguradoras if a.get("id") == rec.get("aseguradora_id")), None)
+        _bordes_tabla(t3, color="7F7F7F", sz=4)
+        rec_id = str(rec.get("aseguradora_id") or "").lower()
+        elegida = next(
+            (
+                a for a in aseguradoras
+                if a.get("id", "").lower() == rec_id
+                or rec_id in a.get("id", "").lower()
+                or a.get("id", "").lower() in rec_id
+            ),
+            None,
+        )
+        if not elegida and aseguradoras:
+            elegida = aseguradoras[0]
+
         logo_path = _resolver_ruta_logo(
             assets,
             elegida.get("logo", "") if elegida else "",
             id_ase=elegida.get("id", "") if elegida else "",
             nombre=elegida.get("nombre", "") if elegida else "",
         )
+        izq = t3.rows[0].cells[0]
+        der = t3.rows[0].cells[1]
+        izq.width = Inches(1.95)
+        der.width = Inches(4.95)
+        _sombrear(izq, BANDA_RECOMENDACION_HEX)
+        _sombrear(der, "FFFFFF")
+
+        pie_rec = str(rec.get("opcion") or "").strip()
+        if elegida and len(elegida.get("opciones", [])) <= 1 and pie_rec.lower() in ("opción 1", "opcion 1"):
+            pie_rec = ""
+
         _logo_en_celda(
-            t3.rows[0].cells[0],
+            izq,
             logo_path,
             ancho_in=1.3,
-            pie=rec.get("opcion", ""),
-            texto_alternativo=_nombre_corto(elegida) if elegida else rec.get("opcion", ""),
+            pie=pie_rec,
+            texto_alternativo=_nombre_corto(elegida) if elegida else pie_rec,
+            fuente=FUENTE_COPROP,
+            tam_pie=11.0,
+            color_alt=AZUL_COPROP,
         )
-        der = t3.rows[0].cells[1]
         der.text = ""
+        der.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         for i, vin in enumerate(rec.get("vinetas", [])):
             p = der.paragraphs[0] if i == 0 else der.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            p.paragraph_format.space_before = Pt(2)
             p.paragraph_format.space_after = Pt(3)
             r = p.add_run("•  " + vin if not vin.startswith("•") else vin)
-            r.font.size = Pt(9)
-            r.font.name = FUENTE
+            r.font.size = Pt(11)
+            r.font.name = FUENTE_COPROP
+        _no_partir(t3.rows[0])
 
-    # 5. Table 4: Coverages (36 rows x (1 + N) cols)
+    # 5. Table 4: Coverages (29 rows x (1 + N) cols)
     if len(doc.tables) > 4 and n_ase > 0:
         t4 = doc.tables[4]
-        _ajustar_columnas(t4, 1 + n_ase)
-        for i, ase in enumerate(aseguradoras):
-            col = i + 1
-            logo_path = _resolver_ruta_logo(
-                assets,
-                ase.get("logo", ""),
-                id_ase=ase.get("id", ""),
-                nombre=ase.get("nombre", ""),
-            )
-            _logo_en_celda(t4.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
+        col0_in, tam_datos = _preparar_tabla_matriz_copropiedades(t4, aseguradoras, assets)
+        ins_col_in = round(5.50 / max(n_ase, 1), 2)
 
         current_section = ""
         for row in t4.rows[1:]:
             concepto_label = row.cells[0].text.strip()
-            if "modulo" in concepto_label.lower():
+            norm_lbl = normalize_str(concepto_label)
+            if norm_lbl.startswith("modulo"):
                 current_section = concepto_label
+                _estilizar_banda_submodulo(row, concepto_label)
                 continue
+            _texto(row.cells[0], concepto_label, tam=tam_datos, centrado=False, fuente=FUENTE_COPROP)
+            row.cells[0].width = Inches(col0_in)
             for i, ase in enumerate(aseguradoras):
                 val_cob = _obtener_cobertura_copropiedades(ase, current_section, concepto_label, meta)
-                _texto(row.cells[i + 1], val_cob, tam=8)
+                _texto(row.cells[i + 1], val_cob, tam=tam_datos, centrado=True, fuente=FUENTE_COPROP)
+                row.cells[i + 1].width = Inches(ins_col_in)
+            _no_partir(row)
 
-    # 6. Table 5: Deductibles (19 rows x (1 + N) cols)
+    # 6. Table 5: Deductibles (17 rows x (1 + N) cols)
     if len(doc.tables) > 5 and n_ase > 0:
         t5 = doc.tables[5]
-        _ajustar_columnas(t5, 1 + n_ase)
-        for i, ase in enumerate(aseguradoras):
-            col = i + 1
-            logo_path = _resolver_ruta_logo(
-                assets,
-                ase.get("logo", ""),
-                id_ase=ase.get("id", ""),
-                nombre=ase.get("nombre", ""),
-            )
-            _logo_en_celda(t5.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
+        col0_in, tam_datos = _preparar_tabla_matriz_copropiedades(t5, aseguradoras, assets)
+        ins_col_in = round(5.50 / max(n_ase, 1), 2)
 
         current_section = ""
         for row in t5.rows[1:]:
             concepto_label = row.cells[0].text.strip()
-            if "modulo" in concepto_label.lower():
+            norm_lbl = normalize_str(concepto_label)
+            if norm_lbl.startswith("modulo"):
                 current_section = concepto_label
+                _estilizar_banda_submodulo(row, concepto_label)
                 continue
+            _texto(row.cells[0], concepto_label, tam=tam_datos, centrado=False, fuente=FUENTE_COPROP)
+            row.cells[0].width = Inches(col0_in)
             for i, ase in enumerate(aseguradoras):
                 val_ded = _obtener_deducible_copropiedades(ase, current_section, concepto_label)
-                _texto(row.cells[i + 1], val_ded, tam=8)
+                _texto(row.cells[i + 1], val_ded, tam=tam_datos, centrado=True, fuente=FUENTE_COPROP)
+                row.cells[i + 1].width = Inches(ins_col_in)
+            _no_partir(row)
 
-    # 7. Table 6: Asistencias (22 rows x (1 + N) cols)
+    # 7. Table 6: Asistencias (25 rows x (1 + N) cols)
     if len(doc.tables) > 6 and n_ase > 0:
         t6 = doc.tables[6]
-        _ajustar_columnas(t6, 1 + n_ase)
-        for i, ase in enumerate(aseguradoras):
-            col = i + 1
-            logo_path = _resolver_ruta_logo(
-                assets,
-                ase.get("logo", ""),
-                id_ase=ase.get("id", ""),
-                nombre=ase.get("nombre", ""),
-            )
-            _logo_en_celda(t6.rows[0].cells[col], logo_path, ancho_in=1.0, texto_alternativo=_nombre_corto(ase))
+        col0_in, tam_datos = _preparar_tabla_matriz_copropiedades(t6, aseguradoras, assets)
+        ins_col_in = round(5.50 / max(n_ase, 1), 2)
 
         current_section = ""
         for row in t6.rows[1:]:
             concepto_label = row.cells[0].text.strip()
-            if "asistencia" in concepto_label.lower():
+            norm_lbl = normalize_str(concepto_label)
+            if norm_lbl.startswith("asistencia"):
                 current_section = concepto_label
+                _estilizar_banda_submodulo(row, concepto_label)
                 continue
+            _texto(row.cells[0], concepto_label, tam=tam_datos, centrado=False, fuente=FUENTE_COPROP)
+            row.cells[0].width = Inches(col0_in)
             for i, ase in enumerate(aseguradoras):
                 val_asist = _obtener_asistencia_copropiedades(ase, current_section, concepto_label)
-                _texto(row.cells[i + 1], val_asist, tam=8)
+                _texto(row.cells[i + 1], val_asist, tam=tam_datos, centrado=True, fuente=FUENTE_COPROP)
+                row.cells[i + 1].width = Inches(ins_col_in)
+            _no_partir(row)
 
 
 def _limpiar_texto_deducible(texto: str, ramo: str = "", categoria: str = "") -> str:
@@ -1296,8 +1551,14 @@ def _limpiar_texto_deducible(texto: str, ramo: str = "", categoria: str = "") ->
         return "NO ESPECIFICA"
 
     t = str(texto).strip()
+    if t.upper() == "N/A":
+        return "N/A"
     if re.search(r"^(sin deducible|no aplica|sin|0%?)$", t, re.IGNORECASE):
         return "SIN DEDUCIBLE"
+
+    # Expand internal insurer shorthand codes (e.g. Mapfre PERD / ABLE)
+    t = re.sub(r"\bPERD\b", "de la pérdida", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bABLE\b", "del Valor Asegurable", t, flags=re.IGNORECASE)
 
     # Convert percentages e.g. 3.00 POR CIENTO -> 3%
     t = re.sub(r"(\d+)\.00\s*(?:POR CIENTO|%|PORCENTAJE)", r"\1%", t, flags=re.IGNORECASE)
@@ -1305,7 +1566,9 @@ def _limpiar_texto_deducible(texto: str, ramo: str = "", categoria: str = "") ->
     t = re.sub(r"(\d+)\s*(?:POR CIENTO|PORCENTAJE)", r"\1%", t, flags=re.IGNORECASE)
     t = re.sub(r"(\d+)\s*%", r"\1%", t)
 
-    # Normalize SMMLV and SMDLV
+    # Normalize SMMLV and SMDLV (including parenthesized '(SMMLV)')
+    t = re.sub(r"\(\s*SMMLV\s*\)", "SMMLV", t, flags=re.IGNORECASE)
+    t = re.sub(r"\(\s*SMDLV\s*\)", "SMDLV", t, flags=re.IGNORECASE)
     t = re.sub(r"SALARIOS?\s+M[IÍ]NIMOS?\s+MENSUALES?\s+LEGALES?\s+VIGENTES?\.?", "SMMLV", t, flags=re.IGNORECASE)
     t = re.sub(r"SALARIOS?\s+M[IÍ]NIMOS?\s+MENSUALES?\.?", "SMMLV", t, flags=re.IGNORECASE)
     t = re.sub(r"SALARIOS?\s+M[IÍ]NIMOS?\s+DIARIOS?\s+LEGALES?\s+VIGENTES?\.?", "SMDLV", t, flags=re.IGNORECASE)
@@ -1318,13 +1581,13 @@ def _limpiar_texto_deducible(texto: str, ramo: str = "", categoria: str = "") ->
     # Normalize key terms
     t = re.sub(r"\b(?:sobre\s+el\s+|del\s+|el\s+)?valor\s+de\s+la\s+p[eé]rdida\b", "de la pérdida", t, flags=re.IGNORECASE)
     t = re.sub(r"\b(?:sobre\s+el\s+|del\s+|el\s+)?valor\s+asegurable(?:\s+de\s+c/art\s+afectado\s+por\s+el\s+sini(?:estro)?)?", "del valor asegurable", t, flags=re.IGNORECASE)
-    t = re.sub(r"\bm[ií]nimo\s*", "mínimo ", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bm[ií]n(?:imo|\.)?\s*(?=\d)", "mínimo ", t, flags=re.IGNORECASE)
 
     t = re.sub(r"\s+", " ", t).strip()
     t = re.sub(r"\s+\.", ".", t)
     t = t.rstrip(".")
 
-    t = re.sub(r"(pérdida|asegurable)\s+mínimo", r"\1, mínimo", t, flags=re.IGNORECASE)
+    t = re.sub(r"(pérdida|asegurable)\.?\s+mínimo", r"\1, mínimo", t, flags=re.IGNORECASE)
     return t
 
 
@@ -2115,7 +2378,7 @@ def render_comparative(
         # Fallback to TRC
         _render_todo_riesgo_construccion(doc, data, assets)
 
-    if norm_cat != "Autos":
+    if norm_cat not in ("Autos", "Copropiedades"):
         _anexos_generales(doc, data)
 
     doc.save(output_path)

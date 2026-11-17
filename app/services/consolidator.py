@@ -18,8 +18,43 @@ from app.schemas.comparative import (
     MetaInfo,
     Recommendation,
 )
+from app.services.concept_mapper import ConceptMapper
 
 logger = logging.getLogger(__name__)
+
+_EMPTY_MARKERS = {"", "none", "null", "no especifica"}
+
+
+def _normalize_insurer_id(raw_id: str, nombre: str = "") -> str:
+    """Normalize insurer ID so multiple quotes from the same company share a canonical key."""
+    s = (raw_id or "").strip().lower()
+    nom = (nombre or "").strip().lower()
+    canonical_aliases = {
+        "seguros_del_estado": "estado",
+        "seguros del estado": "estado",
+        "estado": "estado",
+        "zurich": "zurich",
+        "axa_colpatria": "axa_colpatria",
+        "axa colpatria": "axa_colpatria",
+        "colpatria": "axa_colpatria",
+        "mapfre": "mapfre",
+        "sura": "sura",
+        "suramericana": "sura",
+        "bolivar": "bolivar",
+        "seguros_bolivar": "bolivar",
+        "chubb": "chubb",
+        "hdi": "hdi",
+        "mundial": "mundial",
+        "allianz": "allianz",
+        "solidaria": "solidaria",
+        "previsora": "previsora",
+        "equidad": "equidad",
+        "berkley": "berkley",
+    }
+    for k, v in canonical_aliases.items():
+        if k == s or k in s or k in nom:
+            return v
+    return s or "aseguradora"
 
 
 def _build_company_data(quote: ExtractedQuote) -> InsuranceCompanyData:
@@ -31,6 +66,8 @@ def _build_company_data(quote: ExtractedQuote) -> InsuranceCompanyData:
     Returns:
         InsuranceCompanyData ready for the consolidated structure.
     """
+    norm_id = _normalize_insurer_id(quote.id_compania, quote.nombre_compania)
+
     # Build coaseguro list in the renderer's expected format
     coaseguro = None
     if quote.coaseguro:
@@ -55,18 +92,113 @@ def _build_company_data(quote: ExtractedQuote) -> InsuranceCompanyData:
     ]
 
     return InsuranceCompanyData(
-        id=quote.id_compania,
+        id=norm_id,
         nombre=quote.nombre_compania,
-        logo=f"{quote.id_compania}.png",
+        logo=f"{norm_id}.png",
         coaseguro=coaseguro,
         coaseguro_nota="",
         validez_oferta=quote.validez_oferta,
         opciones=opciones,
         tasa_prorroga=quote.tasa_prorroga,
-        coberturas=quote.coberturas,
-        deducibles=quote.deducibles,
-        subjetividades=quote.subjetividades,
+        coberturas=dict(quote.coberturas or {}),
+        deducibles=dict(quote.deducibles or {}),
+        asistencias=dict(quote.asistencias or {}),
+        subjetividades=list(quote.subjetividades or []),
     )
+
+
+def _merge_same_insurer_companies(
+    companies: list[InsuranceCompanyData],
+) -> list[InsuranceCompanyData]:
+    """Merge multiple InsuranceCompanyData entries belonging to the same insurer.
+
+    In Copropiedades, brokers frequently upload separate PDFs for Option 1 and
+    Option 2 of the same insurer (e.g., Zurich VA vs Zurich Valor de la Pérdida).
+    This merges them into a single column with ordered options ('Opción 1', 'Opción 2')
+    and combines differing deductibles/coverages cleanly.
+    """
+    grouped: dict[str, list[InsuranceCompanyData]] = {}
+    order: list[str] = []
+    for comp in companies:
+        cid = comp.id.lower()
+        if cid not in grouped:
+            grouped[cid] = []
+            order.append(cid)
+        grouped[cid].append(comp)
+
+    merged_list: list[InsuranceCompanyData] = []
+    for cid in order:
+        group = grouped[cid]
+        if len(group) == 1:
+            single = group[0]
+            if len(single.opciones) > 1:
+                single.opciones.sort(key=lambda op: op.get("prima") or 999999999)
+                for idx, op in enumerate(single.opciones, start=1):
+                    etq = str(op.get("etiqueta") or "").strip()
+                    if not etq or etq.lower() in {"opción 1", "opcion 1", "opción 2", "opcion 2"}:
+                        op["etiqueta"] = f"Opción {idx}"
+            merged_list.append(single)
+            continue
+
+        # Sort sub-quotes by lowest option premium so Opción 1 is lowest premium, Opción 2 next
+        group.sort(
+            key=lambda c: min((op.get("prima") or 999999999 for op in c.opciones), default=999999999)
+        )
+        base = group[0].model_copy(deep=True)
+
+        combined_opts: list[dict[str, Any]] = []
+        for comp in group:
+            for op in comp.opciones:
+                combined_opts.append(dict(op))
+        combined_opts.sort(key=lambda op: op.get("prima") or 999999999)
+        for idx, op in enumerate(combined_opts, start=1):
+            op["etiqueta"] = f"Opción {idx}"
+        base.opciones = combined_opts
+
+        # Merge coberturas, deducibles, asistencias across sub-quotes
+        for field_name in ("coberturas", "deducibles", "asistencias"):
+            all_keys: list[str] = []
+            for comp in group:
+                for k in getattr(comp, field_name).keys():
+                    if k not in all_keys:
+                        all_keys.append(k)
+
+            merged_dict: dict[str, Any] = {}
+            for k in all_keys:
+                vals = [getattr(comp, field_name).get(k) for comp in group]
+                non_empty = [
+                    v for v in vals
+                    if v is not None and str(v).strip().lower() not in _EMPTY_MARKERS
+                ]
+                if not non_empty:
+                    merged_dict[k] = vals[0]
+                else:
+                    norm_unique = {str(v).strip() for v in non_empty}
+                    if len(norm_unique) == 1:
+                        merged_dict[k] = non_empty[0]
+                    elif field_name == "deducibles":
+                        parts = []
+                        for idx, v in enumerate(vals, start=1):
+                            if v is not None and str(v).strip().lower() not in _EMPTY_MARKERS:
+                                parts.append(f"Opción {idx}: {str(v).strip()}")
+                        merged_dict[k] = " / ".join(parts)
+                    else:
+                        # Prefer numeric or most complete string value
+                        merged_dict[k] = non_empty[0]
+            setattr(base, field_name, merged_dict)
+
+        # Merge subjetividades preserving order without duplicates
+        seen_subj: set[str] = set()
+        merged_subj: list[str] = []
+        for comp in group:
+            for s in comp.subjetividades:
+                if s and s not in seen_subj:
+                    seen_subj.add(s)
+                    merged_subj.append(s)
+        base.subjetividades = merged_subj
+        merged_list.append(base)
+
+    return merged_list
 
 
 def _build_meta(
@@ -133,6 +265,12 @@ def _build_meta(
         valor_rce=project_meta.valor_rce,
         valor_dno=project_meta.valor_dno,
         valor_manejo=project_meta.valor_manejo,
+        numero_torres=project_meta.numero_torres,
+        numero_apartamentos=project_meta.numero_apartamentos,
+        numero_pisos=project_meta.numero_pisos,
+        uso=project_meta.uso,
+        tipo_construccion=project_meta.tipo_construccion,
+        inf_copropiedad=project_meta.inf_copropiedad,
     )
 
 
@@ -190,19 +328,36 @@ def consolidate_quotes(
         ConsolidatedData ready for the Word renderer.
     """
     logger.info("Consolidando %d cotizaciones (categoría: %s)", len(quotes), categoria)
+    norm_cat = ConceptMapper.normalize_category(
+        categoria or (project_meta.tipo_cobertura if project_meta else "")
+    )
 
     # Build company data entries
     aseguradoras = [_build_company_data(q) for q in quotes]
 
-    # Sort insurers: recommended option first, then by ascending premium (best offer first)
-    if recommendation and recommendation.aseguradora_id:
-        rec_id = recommendation.aseguradora_id.lower()
-        aseguradoras.sort(key=lambda a: (
-            0 if (rec_id in a.id.lower() or a.id.lower() in rec_id) else 1,
-            (a.opciones[0].get("prima") or 999999999) if a.opciones else 999999999,
-        ))
+    if norm_cat == "Copropiedades":
+        # Merge multiple quote PDFs belonging to the same insurer (e.g. Option 1 & Option 2)
+        aseguradoras = _merge_same_insurer_companies(aseguradoras)
+        # In Copropiedades, rows in Section III and columns in V/VI/VII are ordered strictly
+        # by ascending lowest option premium (e.g. Estado -> Zurich -> AXA -> Mapfre).
+        aseguradoras.sort(
+            key=lambda a: min(
+                (op.get("prima") or 999999999 for op in a.opciones),
+                default=999999999,
+            )
+        )
     else:
-        aseguradoras.sort(key=lambda a: (a.opciones[0].get("prima") or 999999999) if a.opciones else 999999999)
+        # Sort insurers: recommended option first, then by ascending premium (best offer first)
+        if recommendation and recommendation.aseguradora_id:
+            rec_id = recommendation.aseguradora_id.lower()
+            aseguradoras.sort(key=lambda a: (
+                0 if (rec_id in a.id.lower() or a.id.lower() in rec_id) else 1,
+                (a.opciones[0].get("prima") or 999999999) if a.opciones else 999999999,
+            ))
+        else:
+            aseguradoras.sort(
+                key=lambda a: (a.opciones[0].get("prima") or 999999999) if a.opciones else 999999999
+            )
 
     # Build metadata
     meta = _build_meta(project_meta, tomador=tomador, categoria=categoria)
@@ -212,11 +367,12 @@ def consolidate_quotes(
     if recommendation and getattr(recommendation, "observaciones_tecnicas", None):
         observations.extend(recommendation.observaciones_tecnicas)
 
-    # Build annex config
+    # Build annex config (Copropiedades ends at VIII. PREVALENCIA without TRC annexes)
+    is_coprop = norm_cat == "Copropiedades"
     anexos = AnnexConfig(
-        leg=True,
-        tasa_prorroga=True,
-        observaciones_adicionales=observations,
+        leg=not is_coprop,
+        tasa_prorroga=not is_coprop,
+        observaciones_adicionales=[] if is_coprop else observations,
     )
 
     consolidated = ConsolidatedData(
