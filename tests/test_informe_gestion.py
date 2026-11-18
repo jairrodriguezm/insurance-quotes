@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from docx import Document
 from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.util import Pt
 from fastapi.testclient import TestClient
 
@@ -75,10 +77,19 @@ def test_sonacol_sept_2026_pptx_and_docx_generation(tmp_path: Path):
     assert prs.slide_height == Pt(810.0)
     assert len(prs.slides) >= 10
 
+    # Verify ONLY first and last slides have blue background; all intermediate slides are pure white (#FFFFFF), and zero pictures exist
+    total_slides = len(prs.slides)
     all_text = []
     tables_count = 0
-    for slide in prs.slides:
+    for s_idx, slide in enumerate(prs.slides):
+        bg_rgb = slide.background.fill.fore_color.rgb
+        if s_idx == 0 or s_idx == total_slides - 1:
+            assert bg_rgb == RGBColor(0x05, 0x1D, 0x40), f"Slide {s_idx} must be blue"
+        else:
+            assert bg_rgb == RGBColor(0xFF, 0xFF, 0xFF), f"Slide {s_idx} must have white background"
+
         for shape in slide.shapes:
+            assert shape.shape_type != MSO_SHAPE_TYPE.PICTURE, f"Slide {s_idx} must not contain images"
             if shape.has_text_frame:
                 all_text.append(shape.text_frame.text)
             if shape.has_table:

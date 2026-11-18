@@ -174,21 +174,8 @@ def _set_solid_slide_bg(slide: Any, color: RGBColor) -> None:
     fill.fore_color.rgb = color
 
 
-def _set_image_slide_bg(slide: Any, image_path: Path | None, fallback_color: RGBColor) -> None:
-    """Place a full-bleed 16:9 background image on the slide, or solid color fallback."""
-    _set_solid_slide_bg(slide, fallback_color)
-    if image_path and image_path.exists():
-        slide.shapes.add_picture(
-            str(image_path),
-            Pt(0),
-            Pt(0),
-            width=Pt(SLIDE_W_PT),
-            height=Pt(SLIDE_H_PT),
-        )
-
-
 def _add_diamond_accents(slide: Any, origin_x: float = 1280.0, origin_y: float = 20.0, color: RGBColor = PPT_ROYAL) -> None:
-    """Draw the signature Flormorado diamond grid motif in the corner."""
+    """Draw the signature Flormorado diamond grid motif using vector shapes."""
     coords = [
         (origin_x, origin_y),
         (origin_x + 70, origin_y),
@@ -204,108 +191,41 @@ def _add_diamond_accents(slide: Any, origin_x: float = 1280.0, origin_y: float =
         dm.line.fill.background()
 
 
-def _add_dark_slide_chrome(
+def _add_white_slide_chrome(
     slide: Any,
     title: str,
     subtitle: str,
-    flormorado_dir: Path | None,
     page_label: str = "",
 ) -> None:
-    """Apply Flormorado dark navy chrome (background, cube icon, logo badge, diamonds, footer)."""
-    _set_solid_slide_bg(slide, PPT_NAVY)
+    """Apply clean pure-white corporate chrome (#FFFFFF bg, navy/royal left stripes, divider, footer) with zero images."""
+    _set_solid_slide_bg(slide, PPT_WHITE)
 
-    # Left vertical royal blue accent stripe
-    _add_rect(slide, 0, 0, 12, SLIDE_H_PT, fill_color=PPT_ROYAL)
-    _add_rect(slide, 12, 0, 4, SLIDE_H_PT, fill_color=PPT_CYAN)
+    # Left geometric accent stripes
+    _add_rect(slide, 0, 0, 14, SLIDE_H_PT, fill_color=PPT_NAVY)
+    _add_rect(slide, 14, 0, 5, SLIDE_H_PT, fill_color=PPT_ROYAL)
+    _add_rect(slide, 19, 0, 3, SLIDE_H_PT, fill_color=PPT_CYAN)
 
-    # Top-right decorative diamonds
-    _add_diamond_accents(slide, origin_x=1080, origin_y=28, color=RGBColor(0x0D, 0x35, 0x68))
-
-    # Cube icon
-    cube_path = flormorado_dir / "icon_cube.png" if flormorado_dir else None
-    if cube_path and cube_path.exists():
-        slide.shapes.add_picture(str(cube_path), Pt(48), Pt(34), width=Pt(44), height=Pt(46))
-        title_x = 106.0
-    else:
-        title_x = 52.0
-
-    # Logo badge top-right
-    badge_path = flormorado_dir / "logo_mrc_badge.png" if flormorado_dir else None
-    if badge_path and badge_path.exists():
-        slide.shapes.add_picture(str(badge_path), Pt(1235), Pt(28), width=Pt(150), height=Pt(72))
-
-    # Title & subtitle
+    # Top-right corporate text label (image-free)
     _add_textbox(
         slide,
-        x_pt=title_x,
-        y_pt=28,
-        w_pt=1080,
-        h_pt=42,
-        text=title.upper(),
-        size_pt=28.0,
-        bold=True,
-        color=PPT_WHITE,
-        font_name=FONT_HEADING,
-    )
-    _add_textbox(
-        slide,
-        x_pt=title_x,
-        y_pt=70,
-        w_pt=1080,
-        h_pt=26,
-        text=subtitle,
-        size_pt=13.5,
-        bold=False,
-        color=PPT_SKY,
-        font_name=FONT_BODY,
-    )
-
-    # Horizontal divider line under header
-    _add_rect(slide, 48, 104, 1344, 1.5, fill_color=PPT_ROYAL)
-
-    # Footer
-    footer_txt = "Multiriesgos de Colombia Ltda. · Informe de gestión de solicitudes"
-    if page_label:
-        footer_txt += f" · {page_label}"
-    _add_textbox(
-        slide,
-        x_pt=48,
-        y_pt=776,
-        w_pt=1344,
-        h_pt=22,
-        text=footer_txt,
+        x_pt=1110,
+        y_pt=32,
+        w_pt=282,
+        h_pt=24,
+        text="MULTIRIESGOS DE COLOMBIA",
         size_pt=10.5,
-        color=PPT_MUTED_LIGHT,
+        bold=True,
+        color=PPT_ROYAL,
+        font_name=FONT_HEADING,
         align=PP_ALIGN.RIGHT,
     )
-
-
-def _add_light_slide_chrome(
-    slide: Any,
-    title: str,
-    subtitle: str,
-    flormorado_dir: Path | None,
-    page_label: str = "",
-) -> None:
-    """Apply Flormorado light corporate chrome (#F3F4FA bg, navy/royal left stripes, MRC logo, footer)."""
-    _set_solid_slide_bg(slide, PPT_LIGHT_BG)
-
-    # Left geometric stripes inspired by Flormorado Pages 3 & 15
-    _add_rect(slide, 0, 0, 16, SLIDE_H_PT, fill_color=PPT_NAVY)
-    _add_rect(slide, 16, 0, 6, SLIDE_H_PT, fill_color=PPT_ROYAL)
-    _add_rect(slide, 22, 0, 3, SLIDE_H_PT, fill_color=PPT_CYAN)
-
-    # Top-right MRC light logo
-    logo_light = flormorado_dir / "logo_mrc_light.png" if flormorado_dir else None
-    if logo_light and logo_light.exists():
-        slide.shapes.add_picture(str(logo_light), Pt(1235), Pt(28), width=Pt(152), height=Pt(56))
 
     # Title & subtitle
     _add_textbox(
         slide,
         x_pt=54,
         y_pt=26,
-        w_pt=1140,
+        w_pt=1060,
         h_pt=42,
         text=title.upper(),
         size_pt=28.0,
@@ -317,7 +237,7 @@ def _add_light_slide_chrome(
         slide,
         x_pt=54,
         y_pt=68,
-        w_pt=1140,
+        w_pt=1280,
         h_pt=26,
         text=subtitle,
         size_pt=13.5,
@@ -482,21 +402,11 @@ def render_informe_gestion_pptx(
     output_path: str | Path,
     assets_dir: str | Path | None = None,
 ) -> str:
-    """Render the complete Management Report (.pptx) styled after Flormorado."""
+    """Render the complete Management Report (.pptx): blue cover & closing slides, pure white content slides, zero images."""
     prs = Presentation()
     prs.slide_width = Pt(SLIDE_W_PT)
     prs.slide_height = Pt(SLIDE_H_PT)
     blank_layout = prs.slide_layouts[6]
-
-    flormorado_dir: Path | None = None
-    if assets_dir:
-        candidate = Path(assets_dir) / "flormorado"
-        if candidate.exists():
-            flormorado_dir = candidate
-    if flormorado_dir is None:
-        default_cand = Path(__file__).resolve().parent.parent.parent / "assets" / "flormorado"
-        if default_cand.exists():
-            flormorado_dir = default_cand
 
     cliente_corto = data["cliente_nombre_corto"]
     cliente_completo = data["cliente_nombre_completo"]
@@ -505,18 +415,36 @@ def render_informe_gestion_pptx(
     subtitle_ctx = f"{cliente_completo} · Informe de gestión · {periodo_titulo}"
 
     # ================================================================== #
-    # SLIDE 1: PORTADA CORPORATIVA (Flormorado Page 1 Style)             #
+    # SLIDE 1: PORTADA / INICIO (Fondo azul corporativo, sin imágenes)   #
     # ================================================================== #
     s1 = prs.slides.add_slide(blank_layout)
-    bg_cover = flormorado_dir / "bg_cover.png" if flormorado_dir else None
-    _set_image_slide_bg(s1, bg_cover, PPT_NAVY)
+    _set_solid_slide_bg(s1, PPT_NAVY)
+
+    # Vector geometric accents (zero images)
+    _add_rect(s1, 0, 0, 18, SLIDE_H_PT, fill_color=PPT_ROYAL)
+    _add_rect(s1, 18, 0, 5, SLIDE_H_PT, fill_color=PPT_CYAN)
+    _add_diamond_accents(s1, origin_x=1220, origin_y=52, color=RGBColor(0x0D, 0x35, 0x68))
+    _add_diamond_accents(s1, origin_x=1220, origin_y=640, color=PPT_ROYAL)
+
+    _add_textbox(
+        s1,
+        x_pt=96,
+        y_pt=64,
+        w_pt=720,
+        h_pt=28,
+        text="MULTIRIESGOS DE COLOMBIA LTDA.",
+        size_pt=13.5,
+        bold=True,
+        color=PPT_CYAN,
+        font_name=FONT_HEADING,
+    )
 
     # Slogan: "Construimos el futuro / Asegurando el presente"
     _add_textbox(
         s1,
-        x_pt=81,
-        y_pt=182,
-        w_pt=680,
+        x_pt=96,
+        y_pt=144,
+        w_pt=900,
         h_pt=40,
         text="Construimos el futuro",
         size_pt=27.0,
@@ -526,9 +454,9 @@ def render_informe_gestion_pptx(
     )
     _add_textbox(
         s1,
-        x_pt=81,
-        y_pt=220,
-        w_pt=680,
+        x_pt=96,
+        y_pt=184,
+        w_pt=900,
         h_pt=40,
         text="Asegurando el presente",
         size_pt=27.0,
@@ -538,15 +466,15 @@ def render_informe_gestion_pptx(
     )
 
     # Period badge pill
-    pill = _add_rect(s1, 81, 282, 420, 36, fill_color=PPT_ROYAL, border_color=PPT_CYAN, border_pt=1.2, rounded=True)
+    _add_rect(s1, 96, 256, 440, 38, fill_color=PPT_ROYAL, border_color=PPT_CYAN, border_pt=1.2, rounded=True)
     _add_textbox(
         s1,
-        x_pt=95,
-        y_pt=285,
-        w_pt=395,
-        h_pt=30,
+        x_pt=112,
+        y_pt=259,
+        w_pt=408,
+        h_pt=32,
         text=f"Informe de gestión · {periodo_titulo}",
-        size_pt=14.5,
+        size_pt=15.0,
         bold=True,
         color=PPT_WHITE,
         font_name=FONT_HEADING,
@@ -556,25 +484,25 @@ def render_informe_gestion_pptx(
     # Main Title: INFORME DE GESTIÓN MRC
     _add_textbox(
         s1,
-        x_pt=81,
-        y_pt=330,
-        w_pt=720,
-        h_pt=128,
+        x_pt=96,
+        y_pt=314,
+        w_pt=1100,
+        h_pt=134,
         text="INFORME DE\nGESTIÓN MRC",
-        size_pt=50.0,
+        size_pt=54.0,
         bold=True,
         color=PPT_WHITE,
         font_name=FONT_HEADING,
     )
 
-    # Client Name in Sky Blue (#56AEFF) matching "FLORMORADO / AR CONSTRUCCIONES"
-    client_font_sz = 26.0 if len(cliente_completo) > 35 else 32.0
+    # Client Name in Sky Blue (#56AEFF)
+    client_font_sz = 28.0 if len(cliente_completo) > 35 else 34.0
     _add_textbox(
         s1,
-        x_pt=81,
-        y_pt=468,
-        w_pt=720,
-        h_pt=86,
+        x_pt=96,
+        y_pt=462,
+        w_pt=1160,
+        h_pt=82,
         text=cliente_completo,
         size_pt=client_font_sz,
         bold=True,
@@ -582,54 +510,46 @@ def render_informe_gestion_pptx(
         font_name=FONT_HEADING,
     )
 
-    # Scope & Cutoff metadata card at bottom-left above diamonds
-    _add_rect(s1, 81, 562, 710, 88, fill_color=PPT_NAVY_PANEL, border_color=PPT_ROYAL, border_pt=1.0, rounded=True)
+    # Scope & Cutoff metadata card at bottom
+    _add_rect(s1, 96, 566, 1140, 96, fill_color=PPT_NAVY_PANEL, border_color=PPT_ROYAL, border_pt=1.2, rounded=True)
+    _add_rect(s1, 96, 566, 8, 96, fill_color=PPT_CYAN)
     _add_textbox(
         s1,
-        x_pt=96,
-        y_pt=570,
-        w_pt=680,
-        h_pt=38,
+        x_pt=120,
+        y_pt=576,
+        w_pt=1090,
+        h_pt=36,
         text=f"{nit_prefix}Incluye solicitudes como tomador, asegurado e integrante de consorcios o uniones temporales",
-        size_pt=12.0,
+        size_pt=13.0,
         bold=False,
         color=PPT_WHITE,
         font_name=FONT_BODY,
     )
     _add_textbox(
         s1,
-        x_pt=96,
-        y_pt=608,
-        w_pt=680,
+        x_pt=120,
+        y_pt=616,
+        w_pt=1090,
         h_pt=36,
         text=(
             f"Ramo: {data['ramo_nombre']} · Solicitudes recibidas {data['rango_fechas_texto']} · "
             f"Estado de las solicitudes al {data['fecha_corte_larga']}"
         ),
-        size_pt=11.5,
+        size_pt=12.5,
         bold=False,
         color=PPT_MUTED_LIGHT,
         font_name=FONT_BODY,
     )
 
     # ================================================================== #
-    # SLIDE 2: CONTENIDO (Flormorado Page 2 Style)                       #
+    # SLIDE 2: CONTENIDO (Fondo blanco)                                  #
     # ================================================================== #
     s2 = prs.slides.add_slide(blank_layout)
-    bg_contenido = flormorado_dir / "bg_contenido.png" if flormorado_dir else None
-    _set_image_slide_bg(s2, bg_contenido, PPT_NAVY)
-
-    _add_textbox(
+    _add_white_slide_chrome(
         s2,
-        x_pt=88,
-        y_pt=85,
-        w_pt=540,
-        h_pt=95,
-        text="CONTENIDO",
-        size_pt=64.0,
-        bold=True,
-        color=PPT_SKY,
-        font_name=FONT_HEADING,
+        title="Contenido",
+        subtitle=subtitle_ctx,
+        page_label="Índice",
     )
 
     toc_items = [
@@ -640,12 +560,12 @@ def render_informe_gestion_pptx(
         ("5", "Tiempos de\natención"),
         ("6", "Detalle y notas\nmetodológicas"),
     ]
-    card_w = 205.0
-    card_h = 172.0
-    gap_x = 18.0
-    gap_y = 18.0
-    start_x = 140.0
-    start_y = 205.0
+    card_w = 380.0
+    card_h = 240.0
+    gap_x = 30.0
+    gap_y = 28.0
+    start_x = 123.0
+    start_y = 160.0
 
     for idx, (num_str, label_str) in enumerate(toc_items):
         col = idx % 3
@@ -653,66 +573,65 @@ def render_informe_gestion_pptx(
         cx = start_x + col * (card_w + gap_x)
         cy = start_y + row * (card_h + gap_y)
 
-        _add_rect(s2, cx, cy, card_w, card_h, fill_color=PPT_ROYAL, border_color=PPT_WHITE, border_pt=1.5)
+        _add_rect(s2, cx, cy, card_w, card_h, fill_color=PPT_WHITE, border_color=RGBColor(0xCB, 0xD5, 0xE1), border_pt=1.5, rounded=True)
+        _add_rect(s2, cx, cy, card_w, 9, fill_color=PPT_ROYAL if idx % 2 == 0 else PPT_NAVY)
         _add_textbox(
             s2,
             x_pt=cx,
-            y_pt=cy + 10,
+            y_pt=cy + 26,
             w_pt=card_w,
-            h_pt=56,
+            h_pt=66,
             text=num_str,
-            size_pt=40.0,
+            size_pt=46.0,
             bold=True,
-            color=PPT_WHITE,
+            color=PPT_ROYAL,
             font_name=FONT_HEADING,
             align=PP_ALIGN.CENTER,
         )
-        # White horizontal divider line inside card matching Flormorado Page 2
-        _add_rect(s2, cx + 18, cy + 82, card_w - 36, 2.5, fill_color=PPT_WHITE)
+        _add_rect(s2, cx + 80, cy + 108, card_w - 160, 2.5, fill_color=PPT_CYAN)
         _add_textbox(
             s2,
-            x_pt=cx + 10,
-            y_pt=cy + 94,
-            w_pt=card_w - 20,
-            h_pt=66,
+            x_pt=cx + 20,
+            y_pt=cy + 126,
+            w_pt=card_w - 40,
+            h_pt=82,
             text=label_str,
-            size_pt=14.5,
-            bold=False,
-            color=PPT_WHITE,
+            size_pt=18.0,
+            bold=True,
+            color=PPT_NAVY,
             font_name=FONT_BODY,
             align=PP_ALIGN.CENTER,
         )
 
     # ================================================================== #
-    # SLIDE 3: 1. RESUMEN DEL MES (Flormorado Dark Dashboard Style)      #
+    # SLIDE 3: 1. RESUMEN DEL MES (Fondo blanco)                         #
     # ================================================================== #
     s3 = prs.slides.add_slide(blank_layout)
-    _add_dark_slide_chrome(
+    _add_white_slide_chrome(
         s3,
         title="1. Resumen del mes",
         subtitle=subtitle_ctx,
-        flormorado_dir=flormorado_dir,
         page_label="Sección 1",
     )
 
     kpis = data["kpis"]
     kpi_items = [
-        (str(kpis["tramitadas"]), "Tramitadas", PPT_SKY),
-        (str(kpis["emitidas"]), "Emitidas", PPT_CYAN),
+        (str(kpis["tramitadas"]), "Tramitadas", PPT_NAVY),
+        (str(kpis["emitidas"]), "Emitidas", PPT_ROYAL),
         (str(kpis["novedades"]), "Novedades atendidas", PPT_CYAN),
-        (str(kpis["declinadas"]), "Declinadas", PPT_SKY),
-        (str(kpis["pendientes"]), "Pendientes", PPT_SKY),
+        (str(kpis["declinadas"]), "Declinadas", PPT_ROYAL),
+        (str(kpis["pendientes"]), "Pendientes", PPT_NAVY),
     ]
 
-    kpi_w = 252.0
+    kpi_w = 250.0
     kpi_h = 148.0
-    kpi_gap = 21.0
-    kpi_start_x = 48.0
+    kpi_gap = 22.0
+    kpi_start_x = 54.0
     kpi_y = 124.0
 
     for c_idx, (num_str, label_str, accent_clr) in enumerate(kpi_items):
         kx = kpi_start_x + c_idx * (kpi_w + kpi_gap)
-        _add_rect(s3, kx, kpi_y, kpi_w, kpi_h, fill_color=PPT_ROYAL, border_color=PPT_WHITE, border_pt=1.2)
+        _add_rect(s3, kx, kpi_y, kpi_w, kpi_h, fill_color=PPT_LIGHT_BG, border_color=RGBColor(0xCB, 0xD5, 0xE1), border_pt=1.2, rounded=True)
         _add_rect(s3, kx, kpi_y, kpi_w, 8, fill_color=accent_clr)
 
         _add_textbox(
@@ -724,7 +643,7 @@ def render_informe_gestion_pptx(
             text=num_str,
             size_pt=48.0,
             bold=True,
-            color=PPT_WHITE,
+            color=PPT_NAVY,
             font_name=FONT_HEADING,
             align=PP_ALIGN.CENTER,
         )
@@ -737,24 +656,24 @@ def render_informe_gestion_pptx(
             text=label_str,
             size_pt=14.5,
             bold=True,
-            color=PPT_ICE_CARD,
+            color=PPT_ROYAL,
             font_name=FONT_BODY,
             align=PP_ALIGN.CENTER,
         )
 
     # Narrative Callout Banner
-    _add_rect(s3, 48, 294, 1344, 86, fill_color=PPT_NAVY_PANEL, border_color=PPT_CYAN, border_pt=1.5, rounded=True)
-    _add_rect(s3, 48, 294, 10, 86, fill_color=PPT_CYAN)
+    _add_rect(s3, 54, 294, 1338, 86, fill_color=PPT_ICE_CARD, border_color=PPT_CYAN, border_pt=1.2, rounded=True)
+    _add_rect(s3, 54, 294, 8, 86, fill_color=PPT_ROYAL)
     _add_textbox(
         s3,
-        x_pt=74,
+        x_pt=78,
         y_pt=304,
-        w_pt=1300,
+        w_pt=1296,
         h_pt=66,
         text=data["resumen_narrativa"],
         size_pt=15.5,
         bold=False,
-        color=PPT_WHITE,
+        color=PPT_NAVY,
         font_name=FONT_BODY,
         v_anchor=MSO_ANCHOR.MIDDLE,
     )
@@ -762,9 +681,9 @@ def render_informe_gestion_pptx(
     # Table 1: Key Indicators (Indicador | Resultado | Cómo se calcula / alcance)
     _create_styled_table(
         s3,
-        x_pt=48,
+        x_pt=54,
         y_pt=404,
-        col_widths_pt=[380.0, 210.0, 754.0],
+        col_widths_pt=[380.0, 210.0, 748.0],
         headers=["Indicador", "Resultado", "Cómo se calcula / alcance"],
         col_alignments=[PP_ALIGN.LEFT, PP_ALIGN.CENTER, PP_ALIGN.LEFT],
         rows_data=[
@@ -784,7 +703,7 @@ def render_informe_gestion_pptx(
                 kpis["tiempo_promedio_detalle"],
             ],
         ],
-        header_fill=PPT_ROYAL,
+        header_fill=PPT_NAVY,
         font_size_pt=14.0,
         row_height_pt=68.0,
         header_height_pt=46.0,
@@ -792,14 +711,13 @@ def render_informe_gestion_pptx(
     )
 
     # ================================================================== #
-    # SLIDE 4: 2. TRAZABILIDAD DE LAS SOLICITUDES                        #
+    # SLIDE 4: 2. TRAZABILIDAD DE LAS SOLICITUDES (Fondo blanco)         #
     # ================================================================== #
     s4 = prs.slides.add_slide(blank_layout)
-    _add_light_slide_chrome(
+    _add_white_slide_chrome(
         s4,
         title="2. Trazabilidad de las solicitudes",
         subtitle=subtitle_ctx,
-        flormorado_dir=flormorado_dir,
         page_label="Sección 2",
     )
 
@@ -885,29 +803,28 @@ def render_informe_gestion_pptx(
     )
 
     # ================================================================== #
-    # SLIDE 5: 3. SOLICITUDES DECLINADAS Y MOTIVO                        #
+    # SLIDE 5: 3. SOLICITUDES DECLINADAS Y MOTIVO (Fondo blanco)         #
     # ================================================================== #
     declinadas_detalle = data["declinadas_detalle_rows"]
     if not declinadas_detalle:
         s5 = prs.slides.add_slide(blank_layout)
-        _add_dark_slide_chrome(
+        _add_white_slide_chrome(
             s5,
             title="3. Solicitudes declinadas y motivo",
             subtitle=subtitle_ctx,
-            flormorado_dir=flormorado_dir,
             page_label="Sección 3",
         )
-        # Visual highlight card for 0 declined requests
-        _add_rect(s5, 48, 160, 1344, 240, fill_color=PPT_NAVY_PANEL, border_color=PPT_CYAN, border_pt=1.5, rounded=True)
-        badge_circle = s5.shapes.add_shape(MSO_SHAPE.OVAL, Pt(100), Pt(215), Pt(120), Pt(120))
+        # Visual highlight card for 0 declined requests on white slide
+        _add_rect(s5, 54, 160, 1338, 240, fill_color=PPT_EMERALD_BG, border_color=PPT_GREEN, border_pt=1.5, rounded=True)
+        badge_circle = s5.shapes.add_shape(MSO_SHAPE.OVAL, Pt(104), Pt(218), Pt(120), Pt(120))
         badge_circle.fill.solid()
         badge_circle.fill.fore_color.rgb = PPT_GREEN
         badge_circle.line.color.rgb = PPT_WHITE
         badge_circle.line.width = Pt(2.0)
         _add_textbox(
             s5,
-            x_pt=100,
-            y_pt=235,
+            x_pt=104,
+            y_pt=238,
             w_pt=120,
             h_pt=80,
             text="0",
@@ -919,20 +836,20 @@ def render_informe_gestion_pptx(
         )
         _add_textbox(
             s5,
-            x_pt=255,
-            y_pt=215,
+            x_pt=258,
+            y_pt=216,
             w_pt=1080,
             h_pt=50,
             text=f"{data['periodo_narrativa']} no se declinó ninguna solicitud.",
             size_pt=26.0,
             bold=True,
-            color=PPT_WHITE,
+            color=PPT_NAVY,
             font_name=FONT_HEADING,
         )
         _add_textbox(
             s5,
-            x_pt=255,
-            y_pt=275,
+            x_pt=258,
+            y_pt=278,
             w_pt=1080,
             h_pt=60,
             text=(
@@ -940,7 +857,7 @@ def render_informe_gestion_pptx(
                 f"con póliza emitida o novedad atendida satisfactoriamente."
             ),
             size_pt=16.0,
-            color=PPT_ICE_CARD,
+            color=PPT_DARK_TEXT,
         )
     else:
         cnt_dec = len(declinadas_detalle)
@@ -954,11 +871,10 @@ def render_informe_gestion_pptx(
         for c_idx, chunk in enumerate(dec_chunks):
             s_dec = prs.slides.add_slide(blank_layout)
             sfx = f" ({c_idx + 1}/{len(dec_chunks)})" if len(dec_chunks) > 1 else ""
-            _add_light_slide_chrome(
+            _add_white_slide_chrome(
                 s_dec,
                 title=f"3. Solicitudes declinadas y motivo{sfx}",
                 subtitle=subtitle_ctx,
-                flormorado_dir=flormorado_dir,
                 page_label="Sección 3",
             )
             cur_y = 118.0
@@ -1021,19 +937,18 @@ def render_informe_gestion_pptx(
             )
 
     # ================================================================== #
-    # SLIDE 6: 4. SOLICITUDES PENDIENTES Y MOTIVO                        #
+    # SLIDE 6: 4. SOLICITUDES PENDIENTES Y MOTIVO (Fondo blanco)         #
     # ================================================================== #
     pendientes_detalle = data["pendientes_detalle_rows"]
     if not pendientes_detalle:
         s6 = prs.slides.add_slide(blank_layout)
-        _add_light_slide_chrome(
+        _add_white_slide_chrome(
             s6,
             title="4. Solicitudes pendientes y motivo",
             subtitle=subtitle_ctx,
-            flormorado_dir=flormorado_dir,
             page_label="Sección 4",
         )
-        _add_rect(s6, 54, 160, 1338, 220, fill_color=PPT_WHITE, border_color=PPT_ROYAL, border_pt=1.5, rounded=True)
+        _add_rect(s6, 54, 160, 1338, 220, fill_color=PPT_LIGHT_BG, border_color=PPT_ROYAL, border_pt=1.5, rounded=True)
         _add_textbox(
             s6,
             x_pt=90,
@@ -1058,11 +973,10 @@ def render_informe_gestion_pptx(
         for c_idx, chunk in enumerate(pen_chunks):
             s_pen = prs.slides.add_slide(blank_layout)
             sfx = f" ({c_idx + 1}/{len(pen_chunks)})" if len(pen_chunks) > 1 else ""
-            _add_light_slide_chrome(
+            _add_white_slide_chrome(
                 s_pen,
                 title=f"4. Solicitudes pendientes y motivo{sfx}",
                 subtitle=subtitle_ctx,
-                flormorado_dir=flormorado_dir,
                 page_label="Sección 4",
             )
             cur_y = 118.0
@@ -1125,24 +1039,24 @@ def render_informe_gestion_pptx(
             )
 
     # ================================================================== #
-    # SLIDE 7: 5. TIEMPOS DE ATENCIÓN                                    #
+    # SLIDE 7: 5. TIEMPOS DE ATENCIÓN (Fondo blanco)                     #
     # ================================================================== #
     s7 = prs.slides.add_slide(blank_layout)
-    _add_dark_slide_chrome(
+    _add_white_slide_chrome(
         s7,
         title="5. Tiempos de atención",
         subtitle=subtitle_ctx,
-        flormorado_dir=flormorado_dir,
         page_label="Sección 5",
     )
 
     # Intro paragraph
-    _add_rect(s7, 48, 120, 1344, 68, fill_color=PPT_NAVY_PANEL, border_color=PPT_ROYAL, border_pt=1.0, rounded=True)
+    _add_rect(s7, 54, 120, 1338, 68, fill_color=PPT_ICE_CARD, border_color=PPT_CYAN, border_pt=1.2, rounded=True)
+    _add_rect(s7, 54, 120, 8, 68, fill_color=PPT_ROYAL)
     _add_textbox(
         s7,
-        x_pt=66,
+        x_pt=76,
         y_pt=126,
-        w_pt=1308,
+        w_pt=1298,
         h_pt=56,
         text=(
             "El tiempo de atención se mide desde que la solicitud ingresa a Multiriesgos de Colombia "
@@ -1151,7 +1065,7 @@ def render_informe_gestion_pptx(
             "por parte del cliente."
         ),
         size_pt=13.5,
-        color=PPT_ICE_CARD,
+        color=PPT_NAVY,
         v_anchor=MSO_ANCHOR.MIDDLE,
     )
 
@@ -1159,9 +1073,9 @@ def render_informe_gestion_pptx(
     # Left Column: Medidas Table + Promedio por Tipo Table
     _, med_h = _create_styled_table(
         s7,
-        x_pt=48,
+        x_pt=54,
         y_pt=208,
-        col_widths_pt=[360.0, 290.0],
+        col_widths_pt=[356.0, 290.0],
         headers=["Medida", "Resultado"],
         col_alignments=[PP_ALIGN.LEFT, PP_ALIGN.CENTER],
         rows_data=[
@@ -1170,7 +1084,7 @@ def render_informe_gestion_pptx(
             ["Mediana", tm["mediana"]],
             ["Más rápida / más lenta", tm["extremos"]],
         ],
-        header_fill=PPT_ROYAL,
+        header_fill=PPT_NAVY,
         font_size_pt=13.0,
         row_height_pt=38.0,
         header_height_pt=40.0,
@@ -1181,9 +1095,9 @@ def render_informe_gestion_pptx(
         tipo_y = 208.0 + med_h + 24.0
         _create_styled_table(
             s7,
-            x_pt=48,
+            x_pt=54,
             y_pt=tipo_y,
-            col_widths_pt=[440.0, 210.0],
+            col_widths_pt=[436.0, 210.0],
             headers=["Promedio por tipo de solicitud", "Días"],
             col_alignments=[PP_ALIGN.LEFT, PP_ALIGN.CENTER],
             rows_data=[[r["tipo"], r["promedio"]] for r in data["tiempos_por_tipo_rows"]],
@@ -1203,14 +1117,14 @@ def render_informe_gestion_pptx(
         headers=["Distribución por tiempo de atención", "Solicitudes"],
         col_alignments=[PP_ALIGN.LEFT, PP_ALIGN.CENTER],
         rows_data=[[r["tramo"], r["solicitudes"]] for r in data["tiempos_tramos_rows"]],
-        header_fill=PPT_ROYAL,
+        header_fill=PPT_NAVY,
         font_size_pt=13.0,
         row_height_pt=42.0,
         header_height_pt=40.0,
         bold_cols={1},
     )
 
-    # Highlight cards under Right Column (Flormorado Page 9 Ice Blue Card style)
+    # Highlight cards under Right Column
     cards_y = 208.0 + tramos_h + 28.0
     if cards_y < 620.0:
         mini_cards = [
@@ -1222,7 +1136,7 @@ def render_informe_gestion_pptx(
         mc_gap = 18.0
         for m_idx, (m_title, m_val, m_clr) in enumerate(mini_cards):
             mx = 732.0 + m_idx * (mc_w + mc_gap)
-            _add_rect(s7, mx, cards_y, mc_w, 125, fill_color=PPT_ICE_CARD, border_color=m_clr, border_pt=1.5)
+            _add_rect(s7, mx, cards_y, mc_w, 125, fill_color=PPT_LIGHT_BG, border_color=m_clr, border_pt=1.5, rounded=True)
             _add_rect(s7, mx, cards_y, mc_w, 8, fill_color=m_clr)
             _add_textbox(
                 s7,
@@ -1252,7 +1166,7 @@ def render_informe_gestion_pptx(
             )
 
     # ================================================================== #
-    # SLIDES 8..K: 6. DETALLE DE SOLICITUDES (Paginated)                 #
+    # SLIDES 8..K: 6. DETALLE DE SOLICITUDES (Paginated, Fondo blanco)   #
     # ================================================================== #
     detalle_rows = data["detalle_solicitudes_rows"]
     # Dynamic chunking based on row text length (consortium members take extra vertical space)
@@ -1279,11 +1193,10 @@ def render_informe_gestion_pptx(
     for page_idx, chunk in enumerate(det_chunks):
         s_det = prs.slides.add_slide(blank_layout)
         page_suffix = f" ({page_idx + 1}/{len(det_chunks)})" if len(det_chunks) > 1 else ""
-        _add_light_slide_chrome(
+        _add_white_slide_chrome(
             s_det,
             title=f"6. Detalle de solicitudes{page_suffix}",
             subtitle=subtitle_ctx,
-            flormorado_dir=flormorado_dir,
             page_label=f"Sección 6 · Pág. {page_idx + 1}/{len(det_chunks)}",
         )
 
@@ -1337,41 +1250,14 @@ def render_informe_gestion_pptx(
         )
 
     # ================================================================== #
-    # SLIDE K+1: 7. NOTAS METODOLÓGICAS (Flormorado Page 4 & 16 Style)   #
+    # SLIDE K+1: 7. NOTAS METODOLÓGICAS (Fondo blanco, sin imágenes)     #
     # ================================================================== #
     s_notes = prs.slides.add_slide(blank_layout)
-    bg_sky = flormorado_dir / "bg_dark_skyscraper.png" if flormorado_dir else None
-    _set_image_slide_bg(s_notes, bg_sky, PPT_NAVY)
-
-    cube_path = flormorado_dir / "icon_cube.png" if flormorado_dir else None
-    if cube_path and cube_path.exists():
-        s_notes.shapes.add_picture(str(cube_path), Pt(56), Pt(42), width=Pt(46), height=Pt(48))
-
-    badge_path = flormorado_dir / "logo_mrc_badge.png" if flormorado_dir else None
-    if badge_path and badge_path.exists():
-        s_notes.shapes.add_picture(str(badge_path), Pt(1040), Pt(34), width=Pt(150), height=Pt(72))
-
-    _add_textbox(
+    _add_white_slide_chrome(
         s_notes,
-        x_pt=116,
-        y_pt=38,
-        w_pt=850,
-        h_pt=46,
-        text="7. NOTAS METODOLÓGICAS",
-        size_pt=32.0,
-        bold=True,
-        color=PPT_WHITE,
-        font_name=FONT_HEADING,
-    )
-    _add_textbox(
-        s_notes,
-        x_pt=116,
-        y_pt=84,
-        w_pt=850,
-        h_pt=26,
-        text="Criterios técnicos y alcance de las métricas del informe",
-        size_pt=14.0,
-        color=PPT_SKY,
+        title="7. Notas metodológicas",
+        subtitle="Criterios técnicos y alcance de las métricas del informe",
+        page_label="Sección 7",
     )
 
     pagare_cnt = data.get("pending_pagare_cartera_count", 0)
@@ -1412,20 +1298,20 @@ def render_informe_gestion_pptx(
         ),
     ]
 
-    note_start_y = 135.0
-    note_step_y = 122.0
+    note_start_y = 132.0
+    note_step_y = 124.0
     for n_idx, (n_title, n_body, badge_clr) in enumerate(notes_list):
         ny = note_start_y + n_idx * note_step_y
-        # Circular badge inspired by Flormorado Page 16
-        circle = s_notes.shapes.add_shape(MSO_SHAPE.OVAL, Pt(56), Pt(ny + 6), Pt(64), Pt(64))
+        _add_rect(s_notes, 54, ny, 1338, 108, fill_color=PPT_LIGHT_BG, border_color=RGBColor(0xE2, 0xE8, 0xF0), border_pt=1.0, rounded=True)
+        circle = s_notes.shapes.add_shape(MSO_SHAPE.OVAL, Pt(74), Pt(ny + 22), Pt(64), Pt(64))
         circle.fill.solid()
         circle.fill.fore_color.rgb = badge_clr
         circle.line.color.rgb = PPT_WHITE
         circle.line.width = Pt(1.5)
         _add_textbox(
             s_notes,
-            x_pt=56,
-            y_pt=ny + 18,
+            x_pt=74,
+            y_pt=ny + 34,
             w_pt=64,
             h_pt=40,
             text=f"0{n_idx + 1}",
@@ -1437,41 +1323,46 @@ def render_informe_gestion_pptx(
         )
         _add_textbox(
             s_notes,
-            x_pt=138,
-            y_pt=ny,
-            w_pt=720,
+            x_pt=158,
+            y_pt=ny + 14,
+            w_pt=1200,
             h_pt=28,
             text=n_title,
             size_pt=17.0,
             bold=True,
-            color=PPT_SKY,
+            color=PPT_NAVY,
             font_name=FONT_HEADING,
         )
         _add_textbox(
             s_notes,
-            x_pt=138,
-            y_pt=ny + 28,
-            w_pt=720,
-            h_pt=78,
+            x_pt=158,
+            y_pt=ny + 46,
+            w_pt=1200,
+            h_pt=50,
             text=n_body,
-            size_pt=13.5,
+            size_pt=14.0,
             bold=False,
-            color=PPT_WHITE,
+            color=PPT_DARK_TEXT,
             font_name=FONT_BODY,
         )
 
     # ================================================================== #
-    # SLIDE K+2: GRACIAS / CIERRE CORPORATIVO (Flormorado Page 14 Style) #
+    # SLIDE K+2: GRACIAS / FIN (Fondo azul corporativo, sin imágenes)    #
     # ================================================================== #
     s_end = prs.slides.add_slide(blank_layout)
-    bg_gracias = flormorado_dir / "bg_gracias.png" if flormorado_dir else None
-    _set_image_slide_bg(s_end, bg_gracias, PPT_NAVY)
+    _set_solid_slide_bg(s_end, PPT_NAVY)
+
+    # Vector geometric accents (zero images)
+    _add_rect(s_end, 0, 0, 18, SLIDE_H_PT, fill_color=PPT_ROYAL)
+    _add_rect(s_end, 18, 0, 5, SLIDE_H_PT, fill_color=PPT_CYAN)
+    _add_diamond_accents(s_end, origin_x=1220, origin_y=52, color=RGBColor(0x0D, 0x35, 0x68))
+    _add_diamond_accents(s_end, origin_x=1220, origin_y=640, color=PPT_ROYAL)
 
     _add_textbox(
         s_end,
-        x_pt=466,
+        x_pt=96,
         y_pt=96,
-        w_pt=500,
+        w_pt=700,
         h_pt=40,
         text="Construimos el futuro",
         size_pt=26.0,
@@ -1481,9 +1372,9 @@ def render_informe_gestion_pptx(
     )
     _add_textbox(
         s_end,
-        x_pt=466,
+        x_pt=96,
         y_pt=134,
-        w_pt=500,
+        w_pt=700,
         h_pt=40,
         text="Asegurando el presente",
         size_pt=26.0,
@@ -1494,9 +1385,9 @@ def render_informe_gestion_pptx(
 
     _add_textbox(
         s_end,
-        x_pt=78,
-        y_pt=280,
-        w_pt=650,
+        x_pt=96,
+        y_pt=248,
+        w_pt=800,
         h_pt=115,
         text="GRACIAS",
         size_pt=72.0,
@@ -1504,44 +1395,59 @@ def render_informe_gestion_pptx(
         color=PPT_WHITE,
         font_name=FONT_HEADING,
     )
+    _add_rect(s_end, 96, 376, 180, 4, fill_color=PPT_CYAN)
 
     _add_textbox(
         s_end,
-        x_pt=164,
-        y_pt=438,
-        w_pt=620,
-        h_pt=75,
-        text="Si tiene alguna pregunta póngase\nen contacto con nosotros:",
+        x_pt=96,
+        y_pt=402,
+        w_pt=900,
+        h_pt=46,
+        text="Si tiene alguna pregunta póngase en contacto con nosotros:",
         size_pt=22.0,
         bold=False,
-        color=PPT_WHITE,
+        color=PPT_ICE_CARD,
         font_name=FONT_BODY,
     )
 
+    _add_rect(s_end, 96, 480, 720, 152, fill_color=PPT_NAVY_PANEL, border_color=PPT_ROYAL, border_pt=1.2, rounded=True)
+    _add_rect(s_end, 96, 480, 8, 152, fill_color=PPT_CYAN)
     _add_textbox(
         s_end,
-        x_pt=248,
-        y_pt=552,
-        w_pt=480,
-        h_pt=50,
-        text="320 4982460",
-        size_pt=24.0,
-        bold=False,
+        x_pt=126,
+        y_pt=498,
+        w_pt=660,
+        h_pt=38,
+        text="Teléfono: 320 4982460",
+        size_pt=22.0,
+        bold=True,
         color=PPT_WHITE,
         font_name=FONT_BODY,
         v_anchor=MSO_ANCHOR.MIDDLE,
     )
-
     _add_textbox(
         s_end,
-        x_pt=248,
-        y_pt=634,
-        w_pt=560,
-        h_pt=50,
-        text="santiagocardona@mrc.com.co",
-        size_pt=24.0,
+        x_pt=126,
+        y_pt=542,
+        w_pt=660,
+        h_pt=38,
+        text="Correo: santiagocardona@mrc.com.co",
+        size_pt=22.0,
         bold=False,
-        color=PPT_WHITE,
+        color=PPT_SKY,
+        font_name=FONT_BODY,
+        v_anchor=MSO_ANCHOR.MIDDLE,
+    )
+    _add_textbox(
+        s_end,
+        x_pt=126,
+        y_pt=586,
+        w_pt=660,
+        h_pt=32,
+        text="Multiriesgos de Colombia Ltda.",
+        size_pt=14.0,
+        bold=False,
+        color=PPT_MUTED_LIGHT,
         font_name=FONT_BODY,
         v_anchor=MSO_ANCHOR.MIDDLE,
     )
